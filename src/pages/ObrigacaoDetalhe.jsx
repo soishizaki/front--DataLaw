@@ -31,6 +31,7 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
   const [salvandoEmail, setSalvandoEmail] = useState(false)
   const [enviandoEmail, setEnviandoEmail] = useState(false)
   const [emailAtivado, setEmailAtivado] = useState(false)
+  const [marcandoCondicao, setMarcandoCondicao] = useState(false)
   const [formStatus] = Form.useForm()
   const [formEmail] = Form.useForm()
 
@@ -101,6 +102,19 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
     }
   }
 
+  const onMarcarCondicao = async (novoStatus) => {
+    setMarcandoCondicao(true)
+    try {
+      const resultado = await api.obrigacoes.atualizar(id, { condition_status: novoStatus })
+      setDados(resultado.obligation)
+      message.success(novoStatus === 'cumprida' ? 'Condição marcada como cumprida.' : 'Condição reaberta.')
+    } catch {
+      message.error('Erro ao atualizar condição.')
+    } finally {
+      setMarcandoCondicao(false)
+    }
+  }
+
   const onEnviarEmail = async () => {
     setEnviandoEmail(true)
     try {
@@ -118,6 +132,9 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
   }
 
   if (!dados) return null
+
+  const isEventual = dados.trigger_family === 'eventual' ||
+    (dados.recurrence && dados.recurrence.toLowerCase().includes('eventual'))
 
   return (
     <div>
@@ -167,22 +184,42 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
                   : '—'}
               </Descriptions.Item>
               <Descriptions.Item label="Tipo" span={1}>
-                {dados.trigger_family ? (
-                  <Tag color={dados.trigger_family === 'eventual' ? 'purple' : 'cyan'}>
-                    {dados.trigger_family.charAt(0).toUpperCase() + dados.trigger_family.slice(1)}
-                  </Tag>
+                {isEventual ? (
+                  <Tag color="purple">Eventual</Tag>
+                ) : dados.trigger_family ? (
+                  <Tag color="cyan">{dados.trigger_family.charAt(0).toUpperCase() + dados.trigger_family.slice(1)}</Tag>
                 ) : '—'}
               </Descriptions.Item>
 
-              {dados.trigger_family === 'eventual' && (
+              {isEventual && (
                 <>
                   <Descriptions.Item label="Condição" span={2}>
                     {dados.condition_raw || '—'}
                   </Descriptions.Item>
                   <Descriptions.Item label="Status da condição" span={2}>
-                    <Tag color={dados.condition_status === 'cumprida' ? 'green' : 'orange'}>
-                      {dados.condition_status || 'pendente'}
-                    </Tag>
+                    <Space>
+                      <Tag color={dados.condition_status === 'cumprida' ? 'green' : 'orange'}>
+                        {dados.condition_status === 'cumprida' ? 'Cumprida' : 'Pendente'}
+                      </Tag>
+                      {dados.condition_status !== 'cumprida' ? (
+                        <Button
+                          size="small"
+                          type="primary"
+                          loading={marcandoCondicao}
+                          onClick={() => onMarcarCondicao('cumprida')}
+                        >
+                          Marcar como cumprida
+                        </Button>
+                      ) : (
+                        <Button
+                          size="small"
+                          loading={marcandoCondicao}
+                          onClick={() => onMarcarCondicao('pendente')}
+                        >
+                          Reabrir condição
+                        </Button>
+                      )}
+                    </Space>
                   </Descriptions.Item>
                 </>
               )}

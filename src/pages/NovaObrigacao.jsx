@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import {
-  Button, Card, DatePicker, Form, Input, message,
+  Alert, Button, Card, DatePicker, Form, Input, message,
   Select, Switch, Typography
 } from 'antd'
 import { api } from '../services/api'
+import { CHAVE_EMAIL } from './Configuracoes'
 
 const { Title } = Typography
 const { TextArea } = Input
@@ -24,6 +25,7 @@ function NovaObrigacao() {
   const onSalvar = async (valores) => {
     setSalvando(true)
     try {
+      const emailGlobal = localStorage.getItem(CHAVE_EMAIL)
       await api.obrigacoes.criar({
         contract_id: valores.contract_id,
         obligation_text: valores.obligation_text,
@@ -36,7 +38,7 @@ function NovaObrigacao() {
         trigger_type: valores.trigger_type || null,
         condition_raw: valores.condition_raw || null,
         email_enabled: valores.email_enabled || false,
-        email_destino: valores.email_destino || null,
+        email_destino: valores.email_enabled ? emailGlobal : null,
         data_envio_email: valores.data_envio_email
           ? valores.data_envio_email.toISOString()
           : null,
@@ -132,12 +134,21 @@ function NovaObrigacao() {
 
           {emailAtivado && (
             <>
-              <Form.Item
-                label="Email de destino"
-                name="email_destino"
-                rules={[{ type: 'email', message: 'Digite um email válido' }]}
-              >
-                <Input placeholder="advogado@escritorio.com" />
+              {!localStorage.getItem(CHAVE_EMAIL) && (
+                <Alert
+                  type="warning"
+                  message="Email não configurado"
+                  description="Defina o email global em Configurações antes de criar com lembrete."
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
+              )}
+              <Form.Item label="Enviar para">
+                <Input
+                  value={localStorage.getItem(CHAVE_EMAIL) || '—'}
+                  disabled
+                  suffix={<Typography.Text type="secondary" style={{ fontSize: 12 }}>definido em Configurações</Typography.Text>}
+                />
               </Form.Item>
               <Form.Item label="Data de envio do lembrete" name="data_envio_email">
                 <DatePicker

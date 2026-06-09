@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import ObrigacaoDetalhe from './pages/ObrigacaoDetalhe'
 import NovaObrigacao from './pages/NovaObrigacao'
 import Configuracoes from './pages/Configuracoes'
+import Relatorio from './pages/Relatorio'
 
 const { Sider, Content, Header } = Layout
 const { Title } = Typography
@@ -14,6 +15,7 @@ const { Title } = Typography
 const menuItems = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'obrigacoes', label: 'Obrigações' },
+  { key: 'relatorio', label: 'Relatório de Urgências' },
   { key: 'nova', label: 'Nova Obrigação' },
   { key: 'configuracoes', label: 'Configurações' },
 ]
@@ -60,6 +62,9 @@ function App() {
     }
     if (paginaAtual === 'obrigacoes') {
       return <Obrigacoes onVerDetalhe={irParaDetalhe} filtroInicial={filtroInicial} />
+    }
+    if (paginaAtual === 'relatorio') {
+      return <Relatorio onVerDetalhe={irParaDetalhe} />
     }
     if (paginaAtual === 'nova') {
       return <NovaObrigacao />

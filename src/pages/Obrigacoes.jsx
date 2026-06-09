@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Table, Tag, Input, Select, Space, Typography, message } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { api } from '../services/api'
@@ -53,17 +53,6 @@ const colunas = [
     render: (v) => v ? new Date(v).toLocaleDateString('pt-BR') : '—',
   },
   {
-    title: 'Tipo',
-    dataIndex: 'trigger_family',
-    key: 'trigger_family',
-    width: 110,
-    render: (v) => v ? (
-      <Tag color={v === 'eventual' ? 'purple' : 'cyan'}>
-        {v.charAt(0).toUpperCase() + v.slice(1)}
-      </Tag>
-    ) : '—',
-  },
-  {
     title: 'Status',
     dataIndex: 'status',
     key: 'status',
@@ -84,6 +73,7 @@ function Obrigacoes({ onVerDetalhe, filtroInicial }) {
   const [filtroStatus, setFiltroStatus] = useState(filtroInicial || null)
   const [pagina, setPagina] = useState(1)
   const limite = 15
+  const debounceRef = useRef(null)
 
   const carregar = async (paginaAtual = 1, q = busca, status = filtroStatus) => {
     setCarregando(true)
@@ -111,8 +101,11 @@ function Obrigacoes({ onVerDetalhe, filtroInicial }) {
 
   const onBuscar = (valor) => {
     setBusca(valor)
-    setPagina(1)
-    carregar(1, valor, filtroStatus)
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setPagina(1)
+      carregar(1, valor, filtroStatus)
+    }, 400)
   }
 
   const onFiltrarStatus = (valor) => {
@@ -136,8 +129,7 @@ function Obrigacoes({ onVerDetalhe, filtroInicial }) {
           prefix={<SearchOutlined />}
           style={{ width: 300 }}
           allowClear
-          onPressEnter={(e) => onBuscar(e.target.value)}
-          onChange={(e) => { if (!e.target.value) onBuscar('') }}
+          onChange={(e) => onBuscar(e.target.value)}
         />
         <Select
           placeholder="Filtrar por status"
