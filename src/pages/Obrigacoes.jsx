@@ -5,16 +5,20 @@ import { api } from '../services/api'
 
 const { Title } = Typography
 
-const coresStatus = {
-  pending: 'blue',
-  completed: 'green',
-  overdue: 'red',
-}
-
 const labelStatus = {
   pending: 'Pendente',
   completed: 'Concluída',
   overdue: 'Atrasada',
+}
+
+function TagStatus({ status }) {
+  if (status === 'pending')
+    return <Tag style={{ backgroundColor: '#FFF3EE', borderColor: '#E8673A', color: '#E8673A' }}>Pendente</Tag>
+  if (status === 'completed')
+    return <Tag color="green">Concluída</Tag>
+  if (status === 'overdue')
+    return <Tag color="red">Atrasada</Tag>
+  return <Tag>{status}</Tag>
 }
 
 const colunas = [
@@ -42,8 +46,29 @@ const colunas = [
     title: 'Recorrência',
     dataIndex: 'recurrence',
     key: 'recurrence',
-    width: 130,
-    render: (v) => v || '—',
+    width: 160,
+    render: (v) => {
+      if (!v) return '—'
+      const cores = {
+        'Contínua': 'green', 'Continua': 'green', 'Contínuo': 'green', 'Continuo': 'green',
+        'Pontual': 'cyan', 'pontual': 'cyan',
+        'Eventual': 'gold', 'Eventual (Sob Condição)': 'gold', 'Eventual (Sob Condicao)': 'gold',
+        'Periódica - Mensal': 'blue', 'Periodica - Mensal': 'blue', 'Mensal': 'blue',
+        'Periódica - Anual': 'volcano', 'Periodica - Anual': 'volcano', 'Anual': 'volcano',
+        'Trimestral': 'geekblue',
+        'Semestral': 'purple',
+        'Única': 'default', 'Unica': 'default',
+        'Encerramento da Concessão': 'magenta',
+        'Encerramento daConcessão': 'magenta',
+        'Encerramento da Concessao': 'magenta',
+        'Periódica - Conforme Vigência': 'orange',
+        'Periodica - Conforme Vigencia': 'orange',
+        'Periódica - ConformeVigênci': 'orange',
+        'Não definido': 'default',
+      }
+      const cor = cores[v] || 'default'
+      return <Tag color={cor}>{v}</Tag>
+    },
   },
   {
     title: 'Prazo',
@@ -56,12 +81,16 @@ const colunas = [
     title: 'Status',
     dataIndex: 'status',
     key: 'status',
-    width: 110,
-    render: (v) => (
-      <Tag color={coresStatus[v] || 'default'}>
-        {labelStatus[v] || v}
-      </Tag>
-    ),
+    width: 130,
+    render: (v, record) => {
+      const isAwaitingCondition =
+        (record.recurrence || '').toLowerCase().includes('eventual') &&
+        record.condition_status !== 'cumprida'
+      if (isAwaitingCondition) {
+        return <Tag color="purple">Aguardando</Tag>
+      }
+      return <TagStatus status={v} />
+    },
   },
 ]
 
@@ -71,11 +100,12 @@ function Obrigacoes({ onVerDetalhe, filtroInicial }) {
   const [carregando, setCarregando] = useState(false)
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState(filtroInicial || null)
+  const [filtroRecorrencia, setFiltroRecorrencia] = useState(null)
   const [pagina, setPagina] = useState(1)
   const limite = 15
   const debounceRef = useRef(null)
 
-  const carregar = async (paginaAtual = 1, q = busca, status = filtroStatus) => {
+  const carregar = async (paginaAtual = 1, q = busca, status = filtroStatus, recurrence = filtroRecorrencia) => {
     setCarregando(true)
     try {
       const params = {
@@ -84,6 +114,7 @@ function Obrigacoes({ onVerDetalhe, filtroInicial }) {
       }
       if (q) params.q = q
       if (status && status !== 'all') params.status = status
+      if (recurrence) params.recurrence = recurrence
 
       const resultado = await api.obrigacoes.listar(params)
       setDados(resultado.items)
@@ -104,19 +135,25 @@ function Obrigacoes({ onVerDetalhe, filtroInicial }) {
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setPagina(1)
-      carregar(1, valor, filtroStatus)
+      carregar(1, valor, filtroStatus, filtroRecorrencia)
     }, 400)
   }
 
   const onFiltrarStatus = (valor) => {
     setFiltroStatus(valor)
     setPagina(1)
-    carregar(1, busca, valor)
+    carregar(1, busca, valor, filtroRecorrencia)
+  }
+
+  const onFiltrarRecorrencia = (valor) => {
+    setFiltroRecorrencia(valor || null)
+    setPagina(1)
+    carregar(1, busca, filtroStatus, valor || null)
   }
 
   const onMudarPagina = (novaPagina) => {
     setPagina(novaPagina)
-    carregar(novaPagina)
+    carregar(novaPagina, busca, filtroStatus, filtroRecorrencia)
   }
 
   return (
@@ -140,6 +177,22 @@ function Obrigacoes({ onVerDetalhe, filtroInicial }) {
             { value: 'pending', label: 'Pendente' },
             { value: 'completed', label: 'Concluída' },
             { value: 'overdue', label: 'Atrasada' },
+          ]}
+        />
+        <Select
+          placeholder="Filtrar por recorrência"
+          style={{ width: 240 }}
+          allowClear
+          onChange={onFiltrarRecorrencia}
+          options={[
+            { value: 'Contínua', label: 'Contínua' },
+            { value: 'Pontual', label: 'Pontual' },
+            { value: 'Eventual', label: 'Eventual' },
+            { value: 'Periódica - Mensal', label: 'Periódica - Mensal' },
+            { value: 'Periódica - Anual', label: 'Periódica - Anual' },
+
+            { value: 'Encerramento da Concessão', label: 'Encerramento da Concessão' },
+            { value: 'Periódica - Conforme Vigência', label: 'Periódica - Conforme Vigência' },
           ]}
         />
       </Space>

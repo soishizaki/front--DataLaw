@@ -25,6 +25,8 @@ export const api = {
       }),
     enviarEmail: (id) =>
       request(`/obligations/${id}/send-email`, { method: 'POST' }),
+    deletar: (id) =>
+      request(`/obligations/${id}`, { method: 'DELETE' }),
     criar: (dados) =>
       request('/obligations/', {
         method: 'POST',
@@ -33,5 +35,10 @@ export const api = {
   },
   contratos: {
     listar: () => request('/contracts/'),
+  },
+  configuracoes: {
+    buscar: () => request('/settings'),
+    salvar: (dados) =>
+      request('/settings', { method: 'PATCH', body: JSON.stringify(dados) }),
   },
 }

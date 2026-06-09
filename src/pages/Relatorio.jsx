@@ -118,29 +118,6 @@ function Relatorio({ onVerDetalhe }) {
 
   const tabItems = [
     {
-      key: 'atrasadas',
-      label: (
-        <Space>
-          Atrasadas
-          <Tag color="red">{atrasadas.length}</Tag>
-        </Space>
-      ),
-      children: (
-        <Table
-          dataSource={atrasadas}
-          columns={colunas(atrasadas)}
-          rowKey="id"
-          size="small"
-          pagination={{ pageSize: 20, showTotal: t => `${t} obrigações` }}
-          onRow={(record) => ({
-            onClick: () => onVerDetalhe(record.id),
-            style: { cursor: 'pointer' },
-          })}
-          locale={{ emptyText: 'Nenhuma obrigação atrasada.' }}
-        />
-      ),
-    },
-    {
       key: 'urgentes',
       label: (
         <Space>
@@ -160,6 +137,29 @@ function Relatorio({ onVerDetalhe }) {
             style: { cursor: 'pointer' },
           })}
           locale={{ emptyText: 'Nenhuma obrigação vencendo em 7 dias.' }}
+        />
+      ),
+    },
+    {
+      key: 'atrasadas',
+      label: (
+        <Space>
+          Atrasadas
+          <Tag color="red">{atrasadas.length}</Tag>
+        </Space>
+      ),
+      children: (
+        <Table
+          dataSource={atrasadas}
+          columns={colunas(atrasadas)}
+          rowKey="id"
+          size="small"
+          pagination={{ pageSize: 20, showTotal: t => `${t} obrigações` }}
+          onRow={(record) => ({
+            onClick: () => onVerDetalhe(record.id),
+            style: { cursor: 'pointer' },
+          })}
+          locale={{ emptyText: 'Nenhuma obrigação atrasada.' }}
         />
       ),
     },

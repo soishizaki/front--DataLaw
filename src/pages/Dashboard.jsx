@@ -7,7 +7,7 @@ import {
   WarningOutlined,
   StopOutlined,
 } from '@ant-design/icons'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { api } from '../services/api'
 import dayjs from 'dayjs'
 
@@ -66,6 +66,16 @@ function calcularResumo(obrigacoes) {
 
   const dadosMes = Object.entries(porMes).map(([name, value]) => ({ name, value }))
 
+  const porRecorrencia = {}
+  for (const o of obrigacoes) {
+    if (o.status === 'completed') continue
+    const tipo = o.recurrence || 'Não definido'
+    porRecorrencia[tipo] = (porRecorrencia[tipo] || 0) + 1
+  }
+  const dadosRecorrencia = Object.entries(porRecorrencia)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+
   const proximasObrigacoes = obrigacoes
     .filter(o => o.status !== 'completed' && o.deadline)
     .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
@@ -74,12 +84,48 @@ function calcularResumo(obrigacoes) {
   return {
     vencendo7, vencendo30, atrasadas, concluidas, total,
     percentConcluidas, dadosStatus, dadosMes,
-    condicoesPendentes, proximasObrigacoes, porData,
+    condicoesPendentes, proximasObrigacoes, porData, dadosRecorrencia,
   }
 }
 
-const coresStatus = { pending: 'blue', completed: 'green', overdue: 'red' }
+const CORES_RECORRENCIA = {
+  'Contínua': '#e35336',
+  'Continua': '#e35336',
+  'Pontual': '#cce241',
+  'pontual': '#cce241',
+  'Eventual (Sob Condição)': '#4de15c',
+  'Eventual (Sob Condicao)': '#4de15c',
+  'Eventual': '#4de15c',
+  'Periódica - Mensal': '#58d6e0',
+  'Periodica - Mensal': '#58d6e0',
+  'Mensal': '#58d6e0',
+  'Periódica - Anual': '#6863de',
+  'Periodica - Anual': '#6863de',
+  'Anual': '#6863de',
+  'Encerramento da Concessão': '#dd6fdd',
+  'Encerramento daConcessão': '#dd6fdd',
+  'Encerramento da Concessao': '#dd6fdd',
+  'Periódica - Conforme Vigência': '#dc7a7d',
+  'Periodica - Conforme Vigencia': '#dc7a7d',
+  'Periódica - ConformeVigênci': '#dc7a7d',
+  'Trimestral': '#58d6e0',
+  'Semestral': '#6863de',
+  'Única': '#dc7a7d',
+  'Unica': '#dc7a7d',
+  'Não definido': '#DADADA',
+}
+
 const labelStatus = { pending: 'Pendente', completed: 'Concluída', overdue: 'Atrasada' }
+
+function TagStatus({ status }) {
+  if (status === 'pending')
+    return <Tag style={{ backgroundColor: '#FFF3EE', borderColor: '#E8673A', color: '#E8673A' }}>Pendente</Tag>
+  if (status === 'completed')
+    return <Tag color="green">Concluída</Tag>
+  if (status === 'overdue')
+    return <Tag color="red">Atrasada</Tag>
+  return <Tag>{status}</Tag>
+}
 
 const colunasProximas = [
   {
@@ -109,13 +155,14 @@ const colunasProximas = [
     title: 'Status',
     dataIndex: 'status',
     width: 110,
-    render: v => <Tag color={coresStatus[v] || 'default'}>{labelStatus[v] || v}</Tag>,
+    render: v => <TagStatus status={v} />,
   },
 ]
 
 function Dashboard({ onNavegar }) {
   const [resumo, setResumo] = useState(null)
   const [carregando, setCarregando] = useState(true)
+  const [cardHover, setCardHover] = useState(null)
 
   useEffect(() => {
     const carregar = async () => {
@@ -181,7 +228,16 @@ function Dashboard({ onNavegar }) {
       <Row gutter={[16, 16]}>
         {cards.map((card) => (
           <Col span={5} key={card.titulo}>
-            <Card hoverable onClick={() => onNavegar('obrigacoes', card.status)} style={{ cursor: 'pointer' }}>
+            <Card
+              onClick={() => onNavegar('obrigacoes', card.status)}
+              onMouseEnter={() => setCardHover(card.titulo)}
+              onMouseLeave={() => setCardHover(null)}
+              style={{
+                cursor: 'pointer',
+                transition: 'box-shadow 0.15s',
+                boxShadow: cardHover === card.titulo ? `0 0 0 2px ${card.cor}` : undefined,
+              }}
+            >
               <Statistic
                 title={card.titulo}
                 value={card.valor}
@@ -192,19 +248,9 @@ function Dashboard({ onNavegar }) {
             </Card>
           </Col>
         ))}
-        <Col span={4}>
-          <Card style={{ height: '100%' }}>
-            <Statistic
-              title="Condições pendentes"
-              value={resumo.condicoesPendentes}
-              prefix={<StopOutlined style={{ color: '#722ed1' }} />}
-              valueStyle={{ color: '#722ed1' }}
-            />
-          </Card>
-        </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+<Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col span={24}>
           <Card title="Calendário de vencimentos">
             <Calendar cellRender={cellRender} />
@@ -223,9 +269,13 @@ function Dashboard({ onNavegar }) {
               size="small"
               onRow={(record) => ({
                 onClick: () => onNavegar('detalhe', record.id),
-                style: { cursor: 'pointer' },
               })}
+              rowClassName={() => 'linha-clicavel'}
             />
+            <style>{`
+              .linha-clicavel { cursor: pointer; }
+              .linha-clicavel:hover > td { background-color: #FFF3EE !important; transition: background-color 0.15s; }
+            `}</style>
           </Card>
         </Col>
       </Row>
@@ -264,16 +314,48 @@ function Dashboard({ onNavegar }) {
                 <Text strong style={{ fontSize: 16 }}>Distribuição por status</Text>
                 <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
-                    <Pie data={resumo.dadosStatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={85} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                    <Pie
+                      data={resumo.dadosStatus}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="45%"
+                      outerRadius={80}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
                       {resumo.dadosStatus.map(entry => (
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip formatter={(v, name) => [v, name]} />
                   </PieChart>
                 </ResponsiveContainer>
               </Col>
             </Row>
+
+            {resumo.dadosRecorrencia.length > 0 && (
+              <>
+                <div style={{ borderTop: '1px solid #f0f0f0', margin: '24px 0' }} />
+                <Text strong style={{ fontSize: 16 }}>Tipos de recorrência</Text>
+                <ResponsiveContainer width="100%" height={Math.max(160, resumo.dadosRecorrencia.length * 44)} style={{ marginTop: 12 }}>
+                  <BarChart
+                    data={resumo.dadosRecorrencia}
+                    layout="vertical"
+                    margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 12 }} />
+                    <Tooltip formatter={(v) => [v, 'Obrigações']} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={28}>
+                      {resumo.dadosRecorrencia.map(entry => (
+                        <Cell key={entry.name} fill={CORES_RECORRENCIA[entry.name] || '#8c8c8c'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            )}
           </Card>
         </Col>
       </Row>
