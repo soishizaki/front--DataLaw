@@ -26,6 +26,17 @@ function normalizarFase(fase) {
   return clean
 }
 
+const DOCUMENTO_PDF = {
+  'Contrato': '/contrato.pdf',
+  'Anexo 1 - Regulamento da Concessão': '/anexo1.pdf',
+  'Anexo 2 - Plano de Exploração Aeroportuária (PEA)': '/anexo2.pdf',
+  'Anexo 4 - Plano de Transferência Operacional (PTO)': '/anexo4.pdf',
+  'Anexo 5 - Tarifas Aeroportuárias': '/anexo5.pdf',
+  'Anexo 6 - Contrato de Administração de Contas': '/anexo6.pdf',
+  'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos': '/anexo8.pdf',
+  'Anexo 17 - Caderno de Penalidades': '/anexo17.pdf',
+}
+
 const labelStatus = {
   pending: 'Pendente',
   completed: 'Concluída',
@@ -388,11 +399,11 @@ function ObrigacaoDetalhe({ id, onVoltar, onVerDetalhe }) {
                       : <Text type="secondary">Defina o prazo</Text>}
               </Descriptions.Item>
 
-              <Descriptions.Item label="Página no contrato" span={1}>
+              <Descriptions.Item label="Página no documento" span={1}>
                 {paginaEditando ? (
                   <Space size={4}>
                     <InputNumber
-                      min={1} max={136} size="small"
+                      min={1} max={9999} size="small"
                       value={paginaValor}
                       onChange={setPaginaValor}
                       style={{ width: 80 }}
@@ -406,9 +417,9 @@ function ObrigacaoDetalhe({ id, onVoltar, onVerDetalhe }) {
                   <Space>
                     <Button
                       type="link" size="small" icon={<FileProtectOutlined />} style={{ padding: 0 }}
-                      onClick={() => window.open('/contrato.pdf#page=' + dados.pagina_contrato, '_blank')}
+                      onClick={() => window.open((DOCUMENTO_PDF[dados.document_name] || '/contrato.pdf') + '#page=' + dados.pagina_contrato, '_blank')}
                     >
-                      Ver no contrato (p. {dados.pagina_contrato})
+                      Ver no documento (p. {dados.pagina_contrato})
                     </Button>
                     <Button
                       type="text" size="small"

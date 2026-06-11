@@ -5,7 +5,9 @@ import {
   CalendarOutlined,
   DashboardOutlined,
   FileProtectOutlined,
+  FileSearchOutlined,
   FileTextOutlined,
+  FolderOpenOutlined,
   PlusCircleOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
@@ -17,6 +19,8 @@ import NovaObrigacao from './pages/NovaObrigacao'
 import Configuracoes from './pages/Configuracoes'
 import Calendario from './pages/Calendario'
 import Contrato from './pages/Contrato'
+import Anexos from './pages/Anexos'
+import Edital from './pages/Edital'
 
 const { Sider, Content, Header } = Layout
 const { Text } = Typography
@@ -31,6 +35,8 @@ const menuItems = [
   { key: 'nova',        label: 'Nova Obrigação',          icon: <PlusCircleOutlined /> },
   { key: 'calendario',  label: 'Calendário',              icon: <CalendarOutlined /> },
   { key: 'contrato',    label: 'Contrato',                icon: <FileProtectOutlined /> },
+  { key: 'anexos',      label: 'Anexos',                  icon: <FolderOpenOutlined /> },
+  { key: 'edital',      label: 'Edital',                  icon: <FileSearchOutlined /> },
   { key: 'configuracoes', label: 'Configurações',         icon: <SettingOutlined /> },
 ]
 
@@ -41,6 +47,8 @@ const titulos = {
   nova:         'Nova Obrigação',
   calendario:   'Calendário',
   contrato:     'Contrato de Concessão',
+  anexos:       'Anexos',
+  edital:       'Edital',
   configuracoes:'Configurações',
 }
 
@@ -88,6 +96,8 @@ function App() {
     if (paginaAtual === 'nova')        return <NovaObrigacao />
     if (paginaAtual === 'calendario') return <Calendario onVerDetalhe={irParaDetalhe} />
     if (paginaAtual === 'contrato')      return <Contrato />
+    if (paginaAtual === 'anexos')        return <Anexos />
+    if (paginaAtual === 'edital')        return <Edital />
     if (paginaAtual === 'configuracoes') return <Configuracoes />
     return <Dashboard onNavegar={navegarComFiltro} />
   }
