@@ -1,85 +1,189 @@
 import { useEffect, useState } from 'react'
 import {
   Button, Card, Checkbox, Col, DatePicker, Form, Input, InputNumber, message,
-  Row, Select, Switch, Typography
+  Row, Select, Space, Switch, TimePicker, Typography
 } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { api } from '../services/api'
 
-const { Title, Text } = Typography
 const { TextArea } = Input
+const { Text, Title } = Typography
+
+const DOCUMENTOS = [
+  { value: 'Contrato', label: 'Contrato' },
+  { value: 'Anexo 2 - Plano de Exploração Aeroportuária (PEA)', label: 'Anexo 2 - Plano de Exploração Aeroportuária (PEA)' },
+  { value: 'Anexo 1 - Regulamento da Concessão', label: 'Anexo 1 - Regulamento da Concessão' },
+  { value: 'Anexo 4 - Plano de Transferência Operacional (PTO)', label: 'Anexo 4 - Plano de Transferência Operacional (PTO)' },
+  { value: 'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos', label: 'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos' },
+  { value: 'Anexo 5 - Tarifas Aeroportuárias', label: 'Anexo 5 - Tarifas Aeroportuárias' },
+  { value: 'Anexo 6 - Contrato de Administração de Contas', label: 'Anexo 6 - Contrato de Administração de Contas' },
+  { value: 'Anexo 17 - Caderno de Penalidades', label: 'Anexo 17 - Caderno de Penalidades' },
+]
+
+const RECORRENCIAS_PERIODICAS = [
+  'Periódica - Mensal',
+  'Periódica - Anual',
+  'Periódica - Conforme Vigência',
+]
+
+const SEM_PRAZO = ['Contínua', 'Encerramento da Concessão']
 
 function NovaObrigacao() {
   const [form] = Form.useForm()
-  const [contratos, setContratos] = useState([])
   const [salvando, setSalvando] = useState(false)
   const [tipoGatilho, setTipoGatilho] = useState(null)
+  const [tipoCondicao, setTipoCondicao] = useState('evento_externo')
+  const [obrigacoesLista, setObrigacoesLista] = useState([])
+  const [recorrenciaAtual, setRecorrenciaAtual] = useState(null)
   const [emailAtivado, setEmailAtivado] = useState(false)
-  const [recurrenceMode, setRecurrenceMode] = useState(null)
+  const [lembreteUnicoAtivo, setLembreteUnicoAtivo] = useState(false)
+  const [recorrenciaAtiva, setRecorrenciaAtiva] = useState(false)
+  const [lembretePersonalizado, setLembretePersonalizado] = useState(false)
 
   useEffect(() => {
-    api.contratos.listar().then(setContratos).catch(() => {
-      message.error('Erro ao carregar contratos.')
-    })
-  }, [])
+    if (tipoGatilho !== 'eventual') return
+    api.obrigacoes.listar({ limit: 500 }).then(res => {
+      setObrigacoesLista(res.items.map(o => ({
+        value: o.id,
+        label: `${o.item_number || o.obligation_code || 'ID ' + o.id} — ${(o.obligation_text || '').slice(0, 80)}`,
+      })))
+    }).catch(() => {})
+  }, [tipoGatilho])
+
+  const onRecorrenciaChange = (val) => {
+    setRecorrenciaAtual(val || null)
+    setLembretePersonalizado(false)
+    const isEventual = (val || '').toLowerCase().includes('eventual')
+    setTipoGatilho(isEventual ? 'eventual' : null)
+    if (!isEventual) setTipoCondicao('evento_externo')
+  }
 
   const onSalvar = async (valores) => {
     setSalvando(true)
     try {
-      const emails = (valores.emails || [])
-        .filter(e => e?.ativo)
-        .map(e => e?.email?.trim())
-        .filter(Boolean)
+      const emails = (valores.emails || []).map(e => e?.email?.trim()).filter(Boolean)
+
+      const date = valores.manual_reminder_date
+      const time = valores.manual_reminder_time
+      const manual_reminder_at = (lembreteUnicoAtivo && date)
+        ? date.hour(time ? time.hour() : 8).minute(time ? time.minute() : 0).second(0).toISOString()
+        : null
+
+      const usaLembreteManual = !hasAutoReminder || lembretePersonalizado
+
       await api.obrigacoes.criar({
-        contract_id: valores.contract_id,
+        contract_id: 1,
         obligation_text: valores.obligation_text,
         document_name: valores.document_name || null,
         item_number: valores.item_number || null,
-        responsible: valores.responsible || null,
+        pagina_contrato: valores.pagina_contrato || null,
+        observations: valores.observations || null,
         recurrence: valores.recurrence || null,
+        contract_phase: valores.contract_phase || null,
         deadline: valores.deadline ? valores.deadline.toISOString() : null,
-        trigger_family: valores.trigger_family || null,
-        trigger_type: valores.trigger_type || null,
-        condition_raw: valores.condition_raw || null,
-        email_enabled: valores.email_enabled || false,
-        email_destino: valores.email_enabled && emails.length > 0 ? emails.join(',') : null,
-        manual_reminder_at: valores.manual_reminder_at
-          ? valores.manual_reminder_at.toISOString()
+        trigger_family: tipoGatilho || null,
+        trigger_type: tipoCondicao === 'evento_externo' ? (valores.trigger_type || null) : null,
+        condition_raw: tipoCondicao === 'evento_externo' ? (valores.condition_raw || null) : null,
+        condition_obligation_id: tipoCondicao === 'cumprimento_obrigacao'
+          ? (valores.condition_obligation_id || null)
           : null,
-        recurrence_mode: valores.recurrence_mode || null,
-        recurrence_time: valores.recurrence_time || null,
-        recurrence_interval_days: valores.recurrence_interval_days || null,
-        recurrence_weekday: valores.recurrence_weekday ?? null,
-        recurrence_day_of_month: valores.recurrence_day_of_month || null,
-        recurrence_month: valores.recurrence_month || null,
+        email_enabled: usaLembreteManual ? (valores.email_enabled || false) : false,
+        email_destino: usaLembreteManual && valores.email_enabled && emails.length > 0 ? emails.join(',') : null,
+        manual_reminder_at: usaLembreteManual ? manual_reminder_at : null,
+        recurrence_mode: usaLembreteManual && recorrenciaAtiva ? 'manual_days' : null,
+        recurrence_time: usaLembreteManual && recorrenciaAtiva ? (valores.recurrence_time || '08:00') : null,
+        recurrence_interval_days: usaLembreteManual && recorrenciaAtiva ? (valores.recurrence_interval_days || 7) : null,
+        recurrence_weekday: null,
+        recurrence_day_of_month: null,
+        recurrence_month: null,
         status: 'pending',
       })
       message.success('Obrigação criada com sucesso.')
       form.resetFields()
       setTipoGatilho(null)
+      setTipoCondicao('evento_externo')
+      setRecorrenciaAtual(null)
+      setObrigacoesLista([])
       setEmailAtivado(false)
-      setRecurrenceMode(null)
-    } catch {
-      message.error('Erro ao criar obrigação.')
+      setLembreteUnicoAtivo(false)
+      setRecorrenciaAtiva(false)
+      setLembretePersonalizado(false)
+    } catch (err) {
+      message.error(err?.message || 'Erro ao criar obrigação.')
     } finally {
       setSalvando(false)
     }
   }
 
+  const mostrarPrazo = !SEM_PRAZO.includes(recorrenciaAtual)
+  const labelPrazo = RECORRENCIAS_PERIODICAS.includes(recorrenciaAtual) ? 'Data de início' : 'Prazo'
+  const placeholderPrazo = RECORRENCIAS_PERIODICAS.includes(recorrenciaAtual) ? 'Início da vigência' : 'Data limite'
+
+  const hasAutoReminder =
+    recorrenciaAtual === 'Encerramento da Concessão' ||
+    (recorrenciaAtual || '').startsWith('Periódica')
+
   return (
     <div>
       <Form form={form} layout="vertical" onFinish={onSalvar}>
+
+        {/* Classificação no topo */}
+        <Row gutter={24}>
+          <Col span={24}>
+            <Card title="Classificação" style={{ marginBottom: 16 }}>
+              <Row gutter={24}>
+                <Col span={12}>
+                  <Form.Item label="Fase" name="contract_phase" style={{ marginBottom: 0 }}>
+                    <Select
+                      placeholder="Selecione a fase contratual"
+                      allowClear
+                      options={[
+                        { value: 'Fase I-A', label: 'Fase I-A' },
+                        { value: 'Fase I-A (Estágio 1)', label: 'Fase I-A (Estágio 1)' },
+                        { value: 'Fase I-A (Estágio 2)', label: 'Fase I-A (Estágio 2)' },
+                        { value: 'Fase I-A (Estágio 3)', label: 'Fase I-A (Estágio 3)' },
+                        { value: 'Fase I-B', label: 'Fase I-B' },
+                        { value: 'Fase II', label: 'Fase II' },
+                        { value: 'Encerramento', label: 'Encerramento' },
+                        { value: 'Todas as fases', label: 'Todas as fases' },
+                      ]}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Recorrência" name="recurrence" style={{ marginBottom: 0 }}>
+                    <Select
+                      placeholder="Selecione a recorrência"
+                      allowClear
+                      onChange={onRecorrenciaChange}
+                      options={[
+                        { value: 'Contínua', label: 'Contínua' },
+                        { value: 'Pontual', label: 'Pontual' },
+                        { value: 'Eventual (Sob Condição)', label: 'Eventual (Sob Condição)' },
+                        { value: 'Periódica - Mensal', label: 'Periódica - Mensal' },
+                        { value: 'Periódica - Anual', label: 'Periódica - Anual' },
+                        { value: 'Periódica - Conforme Vigência', label: 'Periódica - Conforme Vigência' },
+                        { value: 'Encerramento da Concessão', label: 'Encerramento da Concessão' },
+                      ]}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Card>
+          </Col>
+        </Row>
+
         <Row gutter={24} align="stretch">
 
           {/* Coluna principal */}
           <Col span={16}>
             <Card title="Dados da Obrigação" style={{ marginBottom: 16 }}>
-              <Form.Item label="Contrato" name="contract_id" rules={[{ required: true, message: 'Selecione o contrato' }]}>
+              <Form.Item label="Documento" name="document_name" rules={[{ required: true, message: 'Selecione o documento' }]}>
                 <Select
-                  placeholder="Selecione o contrato"
+                  placeholder="Selecione o documento"
                   showSearch
                   optionFilterProp="label"
-                  options={contratos.map((c) => ({ value: c.id, label: c.name }))}
+                  options={DOCUMENTOS}
                 />
               </Form.Item>
 
@@ -88,223 +192,202 @@ function NovaObrigacao() {
               </Form.Item>
 
               <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item label="Documento / Anexo" name="document_name">
-                    <Input placeholder="Ex: Anexo III, Adendo 2..." />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
+                <Col span={8}>
                   <Form.Item label="Número do item" name="item_number">
                     <Input placeholder="Ex: 4.2.1" />
                   </Form.Item>
                 </Col>
+                <Col span={8}>
+                  <Form.Item label="Página no contrato" name="pagina_contrato">
+                    <InputNumber min={1} max={136} placeholder="Ex: 42" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                {mostrarPrazo && (
+                  <Col span={8}>
+                    <Form.Item label={labelPrazo} name="deadline">
+                      <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder={placeholderPrazo} />
+                    </Form.Item>
+                  </Col>
+                )}
               </Row>
 
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item label="Responsável" name="responsible">
-                    <Input placeholder="Ex: Concessionária, ARTESP..." />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item label="Prazo" name="deadline">
-                    <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
+              <Form.Item label="Observações" name="observations" style={{ marginBottom: 0 }}>
+                <TextArea rows={2} placeholder="Informações adicionais sobre esta obrigação..." />
+              </Form.Item>
             </Card>
 
             {tipoGatilho === 'eventual' && (
               <Card title="Condição de Ativação" style={{ marginBottom: 16 }}>
-                <Form.Item label="Tipo do gatilho" name="trigger_type">
-                  <Input placeholder="Ex: Aprovação regulatória, Conclusão de obra..." />
-                </Form.Item>
-                <Form.Item label="Condição" name="condition_raw" style={{ marginBottom: 0 }}>
-                  <TextArea
-                    rows={4}
-                    placeholder="Descreva a condição que precisa ser cumprida para esta obrigação ser ativada..."
+                <Form.Item label="Tipo de condição">
+                  <Select
+                    value={tipoCondicao}
+                    onChange={setTipoCondicao}
+                    options={[
+                      { value: 'evento_externo', label: 'Evento externo' },
+                      { value: 'cumprimento_obrigacao', label: 'Cumprimento de obrigação' },
+                    ]}
                   />
                 </Form.Item>
+
+                {tipoCondicao === 'evento_externo' && (
+                  <>
+                    <Form.Item label="Descrição do evento" name="trigger_type">
+                      <Input placeholder="Ex: Aprovação regulatória, Conclusão de obra..." />
+                    </Form.Item>
+                    <Form.Item label="Condição" name="condition_raw" style={{ marginBottom: 0 }}>
+                      <TextArea
+                        rows={4}
+                        placeholder="Descreva a condição que precisa ser cumprida para esta obrigação ser ativada..."
+                      />
+                    </Form.Item>
+                  </>
+                )}
+
+                {tipoCondicao === 'cumprimento_obrigacao' && (
+                  <Form.Item
+                    label="Obrigação condicionante"
+                    name="condition_obligation_id"
+                    style={{ marginBottom: 0 }}
+                    rules={[{ required: true, message: 'Selecione a obrigação' }]}
+                  >
+                    <Select
+                      showSearch
+                      placeholder="Busque pelo código ou texto da obrigação..."
+                      optionFilterProp="label"
+                      options={obrigacoesLista}
+                      loading={tipoGatilho === 'eventual' && obrigacoesLista.length === 0}
+                    />
+                  </Form.Item>
+                )}
               </Card>
             )}
           </Col>
 
-          {/* Coluna lateral */}
+          {/* Coluna lateral — Lembrete */}
           <Col span={8}>
-            <Card title="Classificação" style={{ marginBottom: 16 }}>
-              <Form.Item label="Recorrência" name="recurrence">
-                <Select
-                  placeholder="Selecione a recorrência"
-                  allowClear
-                  options={[
-                    { value: 'Pontual', label: 'Pontual' },
-                    { value: 'Contínuo', label: 'Contínuo' },
-                    { value: 'Periódico', label: 'Periódico' },
-                  ]}
-                />
-              </Form.Item>
+            {hasAutoReminder && !lembretePersonalizado ? (
+              <Card style={{ marginBottom: 16 }}>
+                <Title level={5} style={{ marginBottom: 8 }}>Lembrete automático</Title>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+                  O lembrete desta obrigação é gerenciado automaticamente com base na
+                  antecedência configurada em Configurações.
+                </Text>
+                <Button type="link" style={{ padding: 0 }} onClick={() => setLembretePersonalizado(true)}>
+                  Usar lembrete personalizado
+                </Button>
+              </Card>
+            ) : (
+              <Card title={hasAutoReminder ? undefined : 'Lembrete por Email'} style={{ marginBottom: 16 }}>
+                {hasAutoReminder && (
+                  <>
+                    <Button
+                      type="link"
+                      style={{ padding: 0, marginBottom: 12, display: 'block' }}
+                      onClick={() => setLembretePersonalizado(false)}
+                    >
+                      ← Voltar ao lembrete automático
+                    </Button>
+                    <Title level={5} style={{ marginBottom: 16 }}>Lembrete por Email</Title>
+                  </>
+                )}
 
-              <Form.Item label="Tipo de obrigação" name="trigger_family" style={{ marginBottom: 0 }}>
-                <Select
-                  placeholder="Selecione o tipo"
-                  allowClear
-                  onChange={setTipoGatilho}
-                  options={[
-                    { value: 'operacional', label: 'Operacional' },
-                    { value: 'eventual', label: 'Eventual (condicional)' },
-                  ]}
-                />
-              </Form.Item>
-            </Card>
+                <Form.Item label="Ativar lembrete" name="email_enabled" valuePropName="checked" style={{ marginBottom: emailAtivado ? 16 : 0 }}>
+                  <Switch onChange={setEmailAtivado} />
+                </Form.Item>
 
-            <Card title="Lembrete por Email">
-              <Form.Item label="Ativar lembrete" name="email_enabled" valuePropName="checked" style={{ marginBottom: emailAtivado ? 16 : 0 }}>
-                <Switch onChange={setEmailAtivado} />
-              </Form.Item>
-
-              {emailAtivado && (
-                <>
-                  <Form.List name="emails" initialValue={[{ email: '', ativo: true }]}>
-                    {(fields, { add }) => (
-                      <>
-                        {fields.map((field) => (
-                          <div
-                            key={field.key}
-                            style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}
+                {emailAtivado && (
+                  <>
+                    <Form.List name="emails" initialValue={[{ email: '' }]}>
+                      {(fields, { add, remove }) => (
+                        <>
+                          {fields.map((field, index) => (
+                            <Form.Item
+                              key={field.key}
+                              label={index === 0 ? 'Email' : ''}
+                              style={{ marginBottom: 8 }}
+                            >
+                              <Space.Compact style={{ width: '100%' }}>
+                                <Form.Item
+                                  {...field}
+                                  name={[field.name, 'email']}
+                                  noStyle
+                                  rules={[
+                                    { required: true, message: 'Informe o email' },
+                                    { type: 'email', message: 'Email inválido' },
+                                  ]}
+                                >
+                                  <Input placeholder="advogado@escritorio.com" />
+                                </Form.Item>
+                                {fields.length > 1 && (
+                                  <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
+                                )}
+                              </Space.Compact>
+                            </Form.Item>
+                          ))}
+                          <Button
+                            type="dashed"
+                            onClick={() => add({ email: '' })}
+                            icon={<PlusOutlined />}
+                            style={{ width: '100%', marginBottom: 16 }}
                           >
-                            <Form.Item
-                              {...field}
-                              name={[field.name, 'ativo']}
-                              valuePropName="checked"
-                              noStyle
-                            >
-                              <Checkbox />
-                            </Form.Item>
-                            <Form.Item
-                              {...field}
-                              name={[field.name, 'email']}
-                              noStyle
-                              rules={[
-                                { required: true, message: 'Informe o email' },
-                                { type: 'email', message: 'Email inválido' },
-                              ]}
-                              style={{ flex: 1 }}
-                            >
-                              <Input
-                                placeholder="advogado@escritorio.com"
-                                style={{ width: '100%' }}
-                              />
-                            </Form.Item>
-                          </div>
-                        ))}
-                        <Button
-                          type="dashed"
-                          onClick={() => add({ email: '', ativo: true })}
-                          icon={<PlusOutlined />}
-                          style={{ width: '100%', marginBottom: 16 }}
-                        >
-                          Adicionar destinatário
-                        </Button>
-                      </>
+                            Adicionar destinatário
+                          </Button>
+                        </>
+                      )}
+                    </Form.List>
+
+                    <Space style={{ marginBottom: 16 }}>
+                      <Checkbox checked={lembreteUnicoAtivo} onChange={e => setLembreteUnicoAtivo(e.target.checked)}>
+                        Lembrete único
+                      </Checkbox>
+                      <Checkbox checked={recorrenciaAtiva} onChange={e => setRecorrenciaAtiva(e.target.checked)}>
+                        Recorrência
+                      </Checkbox>
+                    </Space>
+
+                    {lembreteUnicoAtivo && (
+                      <Row gutter={8}>
+                        <Col span={14}>
+                          <Form.Item label="Data" name="manual_reminder_date">
+                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/AAAA" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={10}>
+                          <Form.Item label="Hora" name="manual_reminder_time">
+                            <TimePicker format="HH:mm" minuteStep={5} style={{ width: '100%' }} />
+                          </Form.Item>
+                        </Col>
+                      </Row>
                     )}
-                  </Form.List>
-                  <Form.Item label="Lembrete único" name="manual_reminder_at">
-                    <DatePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: '100%' }} placeholder="Data e hora do lembrete" />
-                  </Form.Item>
 
-                  <Form.Item label="Recorrência" name="recurrence_mode">
-                    <Select
-                      placeholder="Sem recorrência"
-                      allowClear
-                      onChange={(v) => setRecurrenceMode(v || null)}
-                      options={[
-                        { value: 'manual_days', label: 'A cada X dias' },
-                        { value: 'weekly', label: 'Semanal' },
-                        { value: 'monthly', label: 'Mensal' },
-                        { value: 'yearly', label: 'Anual' },
-                      ]}
-                    />
-                  </Form.Item>
-
-                  {recurrenceMode === 'manual_days' && (
-                    <Row gutter={8}>
-                      <Col span={12}>
-                        <Form.Item label="Intervalo (dias)" name="recurrence_interval_days">
-                          <InputNumber min={1} style={{ width: '100%' }} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item label="Horário" name="recurrence_time">
-                          <Input placeholder="08:00" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  )}
-
-                  {recurrenceMode === 'weekly' && (
-                    <Row gutter={8}>
-                      <Col span={12}>
-                        <Form.Item label="Dia da semana" name="recurrence_weekday">
-                          <Select options={[
-                            { value: 0, label: 'Segunda' }, { value: 1, label: 'Terça' },
-                            { value: 2, label: 'Quarta' }, { value: 3, label: 'Quinta' },
-                            { value: 4, label: 'Sexta' }, { value: 5, label: 'Sábado' },
-                            { value: 6, label: 'Domingo' },
-                          ]} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item label="Horário" name="recurrence_time">
-                          <Input placeholder="08:00" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  )}
-
-                  {recurrenceMode === 'monthly' && (
-                    <Row gutter={8}>
-                      <Col span={12}>
-                        <Form.Item label="Dia do mês" name="recurrence_day_of_month">
-                          <InputNumber min={1} max={31} style={{ width: '100%' }} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item label="Horário" name="recurrence_time">
-                          <Input placeholder="08:00" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  )}
-
-                  {recurrenceMode === 'yearly' && (
-                    <Row gutter={8}>
-                      <Col span={8}>
-                        <Form.Item label="Mês" name="recurrence_month">
-                          <Select options={[
-                            { value: 1, label: 'Jan' }, { value: 2, label: 'Fev' },
-                            { value: 3, label: 'Mar' }, { value: 4, label: 'Abr' },
-                            { value: 5, label: 'Mai' }, { value: 6, label: 'Jun' },
-                            { value: 7, label: 'Jul' }, { value: 8, label: 'Ago' },
-                            { value: 9, label: 'Set' }, { value: 10, label: 'Out' },
-                            { value: 11, label: 'Nov' }, { value: 12, label: 'Dez' },
-                          ]} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={8}>
-                        <Form.Item label="Dia" name="recurrence_day_of_month">
-                          <InputNumber min={1} max={31} style={{ width: '100%' }} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={8}>
-                        <Form.Item label="Horário" name="recurrence_time">
-                          <Input placeholder="08:00" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  )}
-                </>
-              )}
-            </Card>
+                    {recorrenciaAtiva && (
+                      <Row gutter={8}>
+                        <Col span={14}>
+                          <Form.Item label="Repetir" name="recurrence_interval_days">
+                            <Select options={[
+                              { value: 1,   label: 'Todo dia' },
+                              { value: 3,   label: 'A cada 3 dias' },
+                              { value: 7,   label: 'A cada 7 dias' },
+                              { value: 15,  label: 'A cada 15 dias' },
+                              { value: 30,  label: 'A cada 30 dias' },
+                              ...(recorrenciaAtual === 'Periódica - Anual' ? [
+                                { value: 180, label: 'A cada 6 meses' },
+                                { value: 365, label: 'A cada 1 ano' },
+                              ] : []),
+                            ]} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={10}>
+                          <Form.Item label="Horário" name="recurrence_time">
+                            <Input placeholder="08:00" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
+                  </>
+                )}
+              </Card>
+            )}
           </Col>
         </Row>
 

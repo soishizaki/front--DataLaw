@@ -1,15 +1,30 @@
 import { useEffect, useState } from 'react'
 import {
   Alert, Button, Card, Checkbox, Col, DatePicker, Descriptions, Form, Input, InputNumber,
-  message, Modal, Row, Select, Space, Spin, Switch, Tag, Timeline, Typography
+  message, Modal, notification, Row, Select, Space, Spin, Switch, Tag, Timeline, TimePicker, Typography
 } from 'antd'
-import { ArrowLeftOutlined, DeleteOutlined, MailOutlined, PlusOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, DeleteOutlined, FileProtectOutlined, MailOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { api } from '../services/api'
 import { lerEmails } from './Configuracoes'
 
 const { Title, Text } = Typography
 const { TextArea } = Input
+
+function parseDiasEvento(deadlineValue) {
+  if (!deadlineValue) return null
+  if (/imediato/i.test(deadlineValue)) return 0
+  const m = deadlineValue.match(/N:\s*(\d+)\s*dias?/i)
+  return m ? parseInt(m[1]) : null
+}
+
+function normalizarFase(fase) {
+  if (!fase) return null
+  const idx = fase.indexOf('(Adicionado por IA:')
+  let clean = (idx > 0 ? fase.slice(0, idx) : fase).trim()
+  if (clean.startsWith('* ')) clean = clean.slice(2)
+  return clean
+}
 
 const labelStatus = {
   pending: 'Pendente',
@@ -29,7 +44,7 @@ function TagStatus({ status }) {
   return <Tag>{status}</Tag>
 }
 
-function ObrigacaoDetalhe({ id, onVoltar }) {
+function ObrigacaoDetalhe({ id, onVoltar, onVerDetalhe }) {
   const [dados, setDados] = useState(null)
   const [historico, setHistorico] = useState([])
   const [carregando, setCarregando] = useState(true)
@@ -37,9 +52,17 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
   const [salvandoEmail, setSalvandoEmail] = useState(false)
   const [enviandoEmail, setEnviandoEmail] = useState(false)
   const [emailAtivado, setEmailAtivado] = useState(false)
+  const [lembreteUnicoAtivo, setLembreteUnicoAtivo] = useState(false)
+  const [recorrenciaAtiva, setRecorrenciaAtiva] = useState(false)
   const [marcandoCondicao, setMarcandoCondicao] = useState(false)
+  const [salvandoPrazo, setSalvandoPrazo] = useState(false)
+  const [prazoEditado, setPrazoEditado] = useState(null)
   const [excluindo, setExcluindo] = useState(false)
-  const [recurrenceMode, setRecurrenceMode] = useState(null)
+  const [paginaEditando, setPaginaEditando] = useState(false)
+  const [paginaValor, setPaginaValor] = useState(null)
+  const [salvandoPagina, setSalvandoPagina] = useState(false)
+  const [dependentes, setDependentes] = useState([])
+  const [condicaoObrigacao, setCondicaoObrigacao] = useState(null)
   const [formStatus] = Form.useForm()
   const [formEmail] = Form.useForm()
 
@@ -51,24 +74,35 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
       setDados(o)
       setHistorico(resultado.history)
       setEmailAtivado(o.email_enabled)
+
+      // Carrega dependentes (eventuais que dependem desta)
+      try {
+        const depRes = await api.obrigacoes.buscarDependentes(id)
+        setDependentes(depRes.dependents || [])
+      } catch { setDependentes([]) }
+
+      // Carrega obrigação-condição (se esta é eventual com dependência)
+      if (o.has_dependency) {
+        // Não temos o condition_id direto, então buscamos via dependents do obligation vinculado
+        // Por ora deixamos a seção mostrar o texto de depends_on_clauses
+        setCondicaoObrigacao(null)
+      }
       formStatus.setFieldsValue({ status: o.status })
       const emailsSalvos = o.email_destino
         ? o.email_destino.split(',').map(e => e.trim()).filter(Boolean)
         : []
       const emailsIniciais = emailsSalvos.length > 0 ? emailsSalvos : lerEmails()
       const emailsExistentes = emailsIniciais.length > 0
-        ? emailsIniciais.map(e => ({ email: e, ativo: true }))
-        : [{ email: '', ativo: true }]
-      setRecurrenceMode(o.recurrence_mode || null)
+        ? emailsIniciais.map(e => ({ email: e }))
+        : [{ email: '' }]
+      setLembreteUnicoAtivo(!!o.manual_reminder_at)
+      setRecorrenciaAtiva(!!(o.recurrence_mode))
       formEmail.setFieldsValue({
         email_enabled: o.email_enabled,
         emails: emailsExistentes,
-        manual_reminder_at: o.manual_reminder_at ? dayjs(o.manual_reminder_at) : null,
-        recurrence_mode: o.recurrence_mode || null,
-        recurrence_interval_days: o.recurrence_interval_days || null,
-        recurrence_weekday: o.recurrence_weekday ?? null,
-        recurrence_day_of_month: o.recurrence_day_of_month || null,
-        recurrence_month: o.recurrence_month || null,
+        manual_reminder_date: o.manual_reminder_at ? dayjs(o.manual_reminder_at) : null,
+        manual_reminder_time: o.manual_reminder_at ? dayjs(o.manual_reminder_at) : dayjs('08:00', 'HH:mm'),
+        recurrence_interval_days: o.recurrence_interval_days || 7,
         recurrence_time: o.recurrence_time || '08:00',
       })
     } catch {
@@ -93,8 +127,21 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
       setHistorico(resultado.history)
       formStatus.setFieldsValue({ note: '' })
       message.success('Status atualizado com sucesso.')
-    } catch {
-      message.error('Erro ao atualizar status.')
+
+      if (resultado.activated_obligations?.length > 0) {
+        notification.success({
+          message: 'Obrigações eventuais ativadas',
+          description: `As seguintes obrigações eventuais foram ativadas automaticamente: ${resultado.activated_obligations.join(', ')}`,
+          duration: 8,
+        })
+        // Recarrega dependentes para refletir novo estado
+        try {
+          const depRes = await api.obrigacoes.buscarDependentes(id)
+          setDependentes(depRes.dependents || [])
+        } catch { /* ignora */ }
+      }
+    } catch (err) {
+      message.error(err.message || 'Erro ao atualizar status.')
     } finally {
       setSalvando(false)
     }
@@ -102,7 +149,6 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
 
   const onSalvarEmail = async (valores) => {
     const lista = (valores.emails || [])
-      .filter(e => e?.ativo)
       .map(e => e?.email?.trim())
       .filter(Boolean)
     if (valores.email_enabled && lista.length === 0) {
@@ -111,23 +157,28 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
     }
     setSalvandoEmail(true)
     try {
+      const manualAt = lembreteUnicoAtivo && valores.manual_reminder_date
+        ? dayjs(valores.manual_reminder_date)
+            .hour(valores.manual_reminder_time?.hour() ?? 8)
+            .minute(valores.manual_reminder_time?.minute() ?? 0)
+            .second(0)
+            .format('YYYY-MM-DDTHH:mm:ss')
+        : null
       const resultado = await api.obrigacoes.atualizar(id, {
         email_enabled: valores.email_enabled,
         email_destino: valores.email_enabled ? lista.join(',') : null,
-        manual_reminder_at: valores.manual_reminder_at
-          ? valores.manual_reminder_at.toISOString()
-          : null,
-        recurrence_mode: valores.recurrence_mode || '',
-        recurrence_time: valores.recurrence_time || null,
-        recurrence_interval_days: valores.recurrence_interval_days || null,
-        recurrence_weekday: valores.recurrence_weekday ?? null,
-        recurrence_day_of_month: valores.recurrence_day_of_month || null,
-        recurrence_month: valores.recurrence_month || null,
+        manual_reminder_at: manualAt,
+        recurrence_mode: recorrenciaAtiva ? 'manual_days' : '',
+        recurrence_time: recorrenciaAtiva ? (valores.recurrence_time || '08:00') : null,
+        recurrence_interval_days: recorrenciaAtiva ? (valores.recurrence_interval_days || 7) : null,
+        recurrence_weekday: null,
+        recurrence_day_of_month: null,
+        recurrence_month: null,
       })
       setDados(resultado.obligation)
       message.success('Configuração de email salva.')
-    } catch {
-      message.error('Erro ao salvar configuração de email.')
+    } catch (err) {
+      message.error(err?.message || 'Erro ao salvar configuração de email.')
     } finally {
       setSalvandoEmail(false)
     }
@@ -136,13 +187,68 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
   const onMarcarCondicao = async (novoStatus) => {
     setMarcandoCondicao(true)
     try {
-      const resultado = await api.obrigacoes.atualizar(id, { condition_status: novoStatus })
+      const payload = { condition_status: novoStatus }
+      if (novoStatus === 'cumprida') {
+        const dias = parseDiasEvento(dados.deadline_value)
+        if (dias !== null) {
+          const dt = new Date()
+          dt.setDate(dt.getDate() + dias)
+          payload.deadline = dt.toISOString()
+        }
+      }
+      const resultado = await api.obrigacoes.atualizar(id, payload)
       setDados(resultado.obligation)
+      setPrazoEditado(null)
       message.success(novoStatus === 'cumprida' ? 'Condição marcada como cumprida.' : 'Condição reaberta.')
     } catch {
       message.error('Erro ao atualizar condição.')
     } finally {
       setMarcandoCondicao(false)
+    }
+  }
+
+  const onSalvarPrazo = async () => {
+    if (!prazoEditado) { message.warning('Selecione uma data.'); return }
+    setSalvandoPrazo(true)
+    try {
+      const resultado = await api.obrigacoes.atualizar(id, {
+        deadline: prazoEditado.toISOString(),
+      })
+      setDados(resultado.obligation)
+      setPrazoEditado(null)
+      message.success('Prazo salvo.')
+    } catch {
+      message.error('Erro ao salvar prazo.')
+    } finally {
+      setSalvandoPrazo(false)
+    }
+  }
+
+  const onRemoverPrazo = async () => {
+    setSalvandoPrazo(true)
+    try {
+      const resultado = await api.obrigacoes.atualizar(id, { deadline: null })
+      setDados(resultado.obligation)
+      setPrazoEditado(null)
+      message.success('Prazo removido.')
+    } catch {
+      message.error('Erro ao remover prazo.')
+    } finally {
+      setSalvandoPrazo(false)
+    }
+  }
+
+  const onSalvarPaginaContrato = async () => {
+    setSalvandoPagina(true)
+    try {
+      const resultado = await api.obrigacoes.atualizar(id, { pagina_contrato: paginaValor || null })
+      setDados(resultado.obligation)
+      setPaginaEditando(false)
+      message.success(paginaValor ? 'Página no contrato salva.' : 'Referência removida.')
+    } catch {
+      message.error('Erro ao salvar página.')
+    } finally {
+      setSalvandoPagina(false)
     }
   }
 
@@ -173,8 +279,8 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
     try {
       await api.obrigacoes.enviarEmail(id)
       message.success('Email enviado com sucesso.')
-    } catch {
-      message.error('Erro ao enviar email.')
+    } catch (err) {
+      message.error(err?.message || 'Erro ao enviar email.')
     } finally {
       setEnviandoEmail(false)
     }
@@ -188,8 +294,32 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
 
   const isEventual = dados.trigger_family === 'eventual' ||
     (dados.recurrence && dados.recurrence.toLowerCase().includes('eventual'))
-  const isContinua = dados.recurrence === 'Contínuo'
-  const conditionPending = isEventual && dados.condition_status !== 'cumprida'
+  const isContinua = (dados.recurrence || '').toLowerCase().startsWith('contín')
+  const isPontual = (dados.recurrence || '').toLowerCase() === 'pontual'
+  const hasAutoReminder = !isEventual && !isPontual && !isContinua
+
+  const proxDia1 = () => {
+    const hoje = new Date()
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1)
+    return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  }
+  const ultimoEnvioContinua = () => {
+    if (!dados.last_email_sent_at) return '—'
+    const d = new Date(dados.last_email_sent_at)
+    const dia1 = new Date(d.getFullYear(), d.getMonth(), 1)
+    return dia1.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  const statusEnvioContinua = () => {
+    if (!dados.last_email_sent_at) return 'Aguardando'
+    const sent = new Date(dados.last_email_sent_at)
+    const now = new Date()
+    if (sent.getMonth() === now.getMonth() && sent.getFullYear() === now.getFullYear()) {
+      return 'Enviado este mês'
+    }
+    return 'Aguardando'
+  }
+  const conditionPending = isEventual && dados.has_dependency && dados.condition_status !== 'cumprida' && dados.status !== 'completed'
+  const aguardandoEvento = isEventual && !dados.has_dependency && dados.status !== 'completed'
   const _rawCondition = dados.condition_raw || dados.depends_on_clauses || ''
   const conditionText = _rawCondition === '—' || _rawCondition === '—' ? null : _rawCondition || null
 
@@ -227,7 +357,11 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
                 {dados.item_number || '—'}
               </Descriptions.Item>
               <Descriptions.Item label="Status" span={1}>
-                <TagStatus status={dados.status} />
+                {conditionPending
+                  ? <Tag color="purple">Aguardando cumprimento de obrigação</Tag>
+                  : aguardandoEvento
+                    ? <Tag color="gold">Aguardando evento externo</Tag>
+                    : <TagStatus status={dados.status} />}
               </Descriptions.Item>
               <Descriptions.Item label="Documento" span={2}>
                 {dados.document_name || '—'}
@@ -236,29 +370,69 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
                 {dados.obligation_text}
               </Descriptions.Item>
               <Descriptions.Item label="Responsável" span={1}>
-                {dados.responsible || '—'}
+                {isContinua ? 'Concessionária' : (dados.responsible || '—')}
               </Descriptions.Item>
               <Descriptions.Item label="Recorrência" span={1}>
                 {dados.recurrence || '—'}
               </Descriptions.Item>
-              <Descriptions.Item label="Prazo" span={1}>
-                {dados.deadline
-                  ? new Date(dados.deadline).toLocaleDateString('pt-BR')
-                  : '—'}
+              <Descriptions.Item label="Fase" span={1}>
+                {normalizarFase(dados.contract_phase) || '—'}
               </Descriptions.Item>
-              <Descriptions.Item label="Tipo" span={1}>
-                {isEventual ? (
-                  <Tag color="purple">Eventual</Tag>
-                ) : dados.trigger_family ? (
-                  <Tag color="cyan">{dados.trigger_family.charAt(0).toUpperCase() + dados.trigger_family.slice(1)}</Tag>
-                ) : '—'}
+              <Descriptions.Item label="Prazo" span={1}>
+                {isContinua
+                  ? 'Todo dia 1 do mês'
+                  : dados.deadline
+                    ? new Date(dados.deadline).toLocaleDateString('pt-BR')
+                    : dados.next_recurrence_at
+                      ? new Date(dados.next_recurrence_at).toLocaleDateString('pt-BR')
+                      : <Text type="secondary">Defina o prazo</Text>}
+              </Descriptions.Item>
+
+              <Descriptions.Item label="Página no contrato" span={1}>
+                {paginaEditando ? (
+                  <Space size={4}>
+                    <InputNumber
+                      min={1} max={136} size="small"
+                      value={paginaValor}
+                      onChange={setPaginaValor}
+                      style={{ width: 80 }}
+                    />
+                    <Button size="small" type="primary" loading={salvandoPagina} onClick={onSalvarPaginaContrato}>
+                      OK
+                    </Button>
+                    <Button size="small" onClick={() => setPaginaEditando(false)}>✕</Button>
+                  </Space>
+                ) : dados.pagina_contrato ? (
+                  <Space>
+                    <Button
+                      type="link" size="small" icon={<FileProtectOutlined />} style={{ padding: 0 }}
+                      onClick={() => window.open('/contrato.pdf#page=' + dados.pagina_contrato, '_blank')}
+                    >
+                      Ver no contrato (p. {dados.pagina_contrato})
+                    </Button>
+                    <Button
+                      type="text" size="small"
+                      style={{ padding: '0 4px', fontSize: 11, color: '#8c8c8c' }}
+                      onClick={() => { setPaginaValor(dados.pagina_contrato); setPaginaEditando(true) }}
+                    >
+                      Editar
+                    </Button>
+                  </Space>
+                ) : (
+                  <Button
+                    type="link" size="small" style={{ padding: 0 }}
+                    onClick={() => { setPaginaValor(null); setPaginaEditando(true) }}
+                  >
+                    Definir
+                  </Button>
+                )}
               </Descriptions.Item>
 
               {isEventual && (
                 <>
                   <Descriptions.Item label="Condição de Ativação" span={2}>
                     <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                      <Text>{conditionText || '—'}</Text>
+                      {conditionText && <Text>{conditionText}</Text>}
                       <Space>
                         <Tag color={dados.condition_status === 'cumprida' ? 'green' : 'volcano'}>
                           {dados.condition_status === 'cumprida' ? 'Evento ocorrido' : 'Aguardando evento'}
@@ -297,24 +471,32 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
                 </>
               )}
 
-              {dados.next_recurrence_at && (
+              {isContinua ? (
+                <Descriptions.Item label="Próx. recorrência" span={1}>
+                  Dia 1 de {proxDia1()}
+                </Descriptions.Item>
+              ) : dados.next_recurrence_at ? (
                 <Descriptions.Item label="Próx. recorrência" span={1}>
                   {new Date(dados.next_recurrence_at).toLocaleString('pt-BR')}
                 </Descriptions.Item>
-              )}
-              {dados.next_reminder_at && (
+              ) : null}
+              {isContinua ? (
+                <Descriptions.Item label="Próx. lembrete" span={1}>
+                  Dia 1 de {proxDia1()}
+                </Descriptions.Item>
+              ) : dados.next_reminder_at ? (
                 <Descriptions.Item label="Próx. lembrete" span={1}>
                   {new Date(dados.next_reminder_at).toLocaleString('pt-BR')}
                 </Descriptions.Item>
-              )}
-              {dados.last_email_sent_at && (
+              ) : null}
+              {(isContinua || dados.last_email_sent_at) && (
                 <Descriptions.Item label="Último envio" span={1}>
-                  {new Date(dados.last_email_sent_at).toLocaleString('pt-BR')}
+                  {isContinua ? ultimoEnvioContinua() : new Date(dados.last_email_sent_at).toLocaleString('pt-BR')}
                 </Descriptions.Item>
               )}
-              {dados.status_envio && (
+              {(isContinua || dados.status_envio) && (
                 <Descriptions.Item label="Status envio" span={1}>
-                  {dados.status_envio}
+                  {isContinua ? statusEnvioContinua() : dados.status_envio}
                 </Descriptions.Item>
               )}
               {dados.observations && (
@@ -322,8 +504,65 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
                   {dados.observations}
                 </Descriptions.Item>
               )}
+
+              {dependentes.length > 0 && (
+                <Descriptions.Item label="Ativa ao concluir" span={2}>
+                  <Space wrap>
+                    {dependentes.map(d => (
+                      <Tag
+                        key={d.id}
+                        color={d.condition_status === 'cumprida' ? 'green' : 'purple'}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onVerDetalhe?.(d.id)}
+                      >
+                        {d.item_number || d.obligation_code || `ID ${d.id}`}
+                        {d.condition_status === 'cumprida' ? ' ✓' : ''}
+                      </Tag>
+                    ))}
+                  </Space>
+                  <Text type="secondary" style={{ display: 'block', marginTop: 4, fontSize: 12 }}>
+                    Ao concluir esta obrigação, as eventuais acima serão ativadas automaticamente.
+                  </Text>
+                </Descriptions.Item>
+              )}
             </Descriptions>
           </Card>
+
+          {((isEventual && dados.condition_status === 'cumprida') || isPontual) && (
+            <Card style={{ marginBottom: 16 }}>
+              <Title level={5} style={{ marginBottom: 12 }}>Prazo de Cumprimento</Title>
+              {dados.deadline ? (
+                <Space direction="vertical" size={2} style={{ marginBottom: 8 }}>
+                  <Text>Prazo definido: <strong>{new Date(dados.deadline).toLocaleDateString('pt-BR')}</strong></Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Para alterar, selecione uma nova data:</Text>
+                </Space>
+              ) : isEventual && parseDiasEvento(dados.deadline_value) === null ? (
+                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                  O prazo não está definido explicitamente no contrato. Insira a data limite manualmente.
+                </Text>
+              ) : !dados.deadline ? (
+                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                  Nenhum prazo definido. Selecione uma data para esta obrigação.
+                </Text>
+              ) : null}
+              <Space wrap>
+                <DatePicker
+                  format="DD/MM/YYYY"
+                  placeholder="Selecione a data"
+                  value={prazoEditado}
+                  onChange={setPrazoEditado}
+                />
+                <Button type="primary" loading={salvandoPrazo} onClick={onSalvarPrazo}>
+                  {dados.deadline ? 'Atualizar prazo' : 'Confirmar prazo'}
+                </Button>
+                {dados.deadline && (
+                  <Button danger loading={salvandoPrazo} onClick={onRemoverPrazo}>
+                    Remover prazo
+                  </Button>
+                )}
+              </Space>
+            </Card>
+          )}
 
           {isContinua ? (
             <Card style={{ marginBottom: 16 }}>
@@ -352,7 +591,17 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
                 <Text>{emailAtivado ? 'Incluída no lembrete mensal' : 'Não incluída no lembrete mensal'}</Text>
               </Space>
             </Card>
-          ) : (
+          ) : hasAutoReminder ? (
+            <Card style={{ marginBottom: 16 }}>
+              <Title level={5} style={{ marginBottom: 8 }}>Lembrete automático</Title>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                O lembrete desta obrigação é gerenciado automaticamente com base na antecedência configurada em Configurações.
+              </Text>
+              {dados.next_reminder_at && (
+                <Text>Próximo envio: <strong>{new Date(dados.next_reminder_at).toLocaleDateString('pt-BR')}</strong></Text>
+              )}
+            </Card>
+          ) : (isEventual && dados.condition_status !== 'cumprida') ? null : (
             <Card style={{ marginBottom: 16 }}>
               <Title level={5} style={{ marginBottom: 16 }}>Lembrete por Email</Title>
               <Form form={formEmail} layout="vertical" onFinish={onSalvarEmail}>
@@ -363,43 +612,35 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
                 {emailAtivado && (
                   <>
                     <Form.List name="emails">
-                      {(fields, { add }) => (
+                      {(fields, { add, remove }) => (
                         <>
-                          {fields.map((field) => (
-                            <div
+                          {fields.map((field, index) => (
+                            <Form.Item
                               key={field.key}
-                              style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}
+                              label={index === 0 ? 'Email' : ''}
+                              style={{ marginBottom: 8 }}
                             >
-                              <Form.Item
-                                {...field}
-                                name={[field.name, 'ativo']}
-                                valuePropName="checked"
-                                noStyle
-                              >
-                                <Checkbox />
-                              </Form.Item>
-                              <Form.Item
-                                {...field}
-                                name={[field.name, 'email']}
-                                noStyle
-                                rules={[
-                                  { required: true, message: 'Informe o email' },
-                                  { type: 'email', message: 'Email inválido' },
-                                ]}
-                                style={{ flex: 1 }}
-                              >
-                                <Input placeholder="advogado@escritorio.com" style={{ width: '100%' }} />
-                              </Form.Item>
-                            </div>
+                              <Space.Compact style={{ width: '100%' }}>
+                                <Form.Item
+                                  {...field}
+                                  name={[field.name, 'email']}
+                                  noStyle
+                                  rules={[
+                                    { required: true, message: 'Informe o email' },
+                                    { type: 'email', message: 'Email inválido' },
+                                  ]}
+                                >
+                                  <Input placeholder="advogado@escritorio.com" />
+                                </Form.Item>
+                                {fields.length > 1 && (
+                                  <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
+                                )}
+                              </Space.Compact>
+                            </Form.Item>
                           ))}
-                          {fields.length === 0 && (
-                            <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                              Nenhum destinatário adicionado.
-                            </Typography.Text>
-                          )}
                           <Button
                             type="dashed"
-                            onClick={() => add({ email: '', ativo: true })}
+                            onClick={() => add({ email: '' })}
                             icon={<PlusOutlined />}
                             style={{ width: '100%', marginBottom: 16 }}
                           >
@@ -409,102 +650,56 @@ function ObrigacaoDetalhe({ id, onVoltar }) {
                       )}
                     </Form.List>
 
-                    <Form.Item label="Lembrete único" name="manual_reminder_at">
-                      <DatePicker
-                        showTime
-                        format="DD/MM/YYYY HH:mm"
-                        style={{ width: '100%' }}
-                        placeholder="Data e hora do lembrete"
-                      />
-                    </Form.Item>
+                    <Space style={{ marginBottom: 16 }}>
+                      <Checkbox
+                        checked={lembreteUnicoAtivo}
+                        onChange={e => setLembreteUnicoAtivo(e.target.checked)}
+                      >
+                        Lembrete único
+                      </Checkbox>
+                      <Checkbox
+                        checked={recorrenciaAtiva}
+                        onChange={e => setRecorrenciaAtiva(e.target.checked)}
+                      >
+                        Recorrência
+                      </Checkbox>
+                    </Space>
 
-                    <Form.Item label="Recorrência" name="recurrence_mode">
-                      <Select
-                        placeholder="Sem recorrência"
-                        allowClear
-                        onChange={(v) => setRecurrenceMode(v || null)}
-                        options={[
-                          { value: 'manual_days', label: 'A cada X dias' },
-                          { value: 'weekly', label: 'Semanal' },
-                          { value: 'monthly', label: 'Mensal' },
-                          { value: 'yearly', label: 'Anual' },
-                        ]}
-                      />
-                    </Form.Item>
-
-                    {recurrenceMode === 'manual_days' && (
+                    {lembreteUnicoAtivo && (
                       <Row gutter={8}>
-                        <Col span={12}>
-                          <Form.Item label="Intervalo (dias)" name="recurrence_interval_days">
-                            <InputNumber min={1} style={{ width: '100%' }} />
+                        <Col span={14}>
+                          <Form.Item label="Data" name="manual_reminder_date">
+                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/AAAA" />
                           </Form.Item>
                         </Col>
-                        <Col span={12}>
-                          <Form.Item label="Horário" name="recurrence_time">
-                            <Input placeholder="08:00" />
+                        <Col span={10}>
+                          <Form.Item label="Hora" name="manual_reminder_time">
+                            <TimePicker format="HH:mm" minuteStep={5} style={{ width: '100%' }} />
                           </Form.Item>
                         </Col>
                       </Row>
                     )}
 
-                    {recurrenceMode === 'weekly' && (
+                    {recorrenciaAtiva && (
                       <Row gutter={8}>
-                        <Col span={12}>
-                          <Form.Item label="Dia da semana" name="recurrence_weekday">
-                            <Select options={[
-                              { value: 0, label: 'Segunda' },
-                              { value: 1, label: 'Terça' },
-                              { value: 2, label: 'Quarta' },
-                              { value: 3, label: 'Quinta' },
-                              { value: 4, label: 'Sexta' },
-                              { value: 5, label: 'Sábado' },
-                              { value: 6, label: 'Domingo' },
-                            ]} />
+                        <Col span={14}>
+                          <Form.Item label="Repetir" name="recurrence_interval_days">
+                            <Select
+                              options={[
+                                { value: 1,   label: 'Todo dia' },
+                                { value: 3,   label: 'A cada 3 dias' },
+                                { value: 7,   label: 'A cada 7 dias' },
+                                { value: 15,  label: 'A cada 15 dias' },
+                                { value: 30,  label: 'A cada 30 dias' },
+                                ...(dados?.recurrence === 'Periódica - Anual' ? [
+                                  { value: 180, label: 'A cada 6 meses' },
+                                  { value: 365, label: 'A cada 1 ano' },
+                                ] : []),
+                              ]}
+                            />
                           </Form.Item>
                         </Col>
-                        <Col span={12}>
-                          <Form.Item label="Horário" name="recurrence_time">
-                            <Input placeholder="08:00" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    {recurrenceMode === 'monthly' && (
-                      <Row gutter={8}>
-                        <Col span={12}>
-                          <Form.Item label="Dia do mês" name="recurrence_day_of_month">
-                            <InputNumber min={1} max={31} style={{ width: '100%' }} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                          <Form.Item label="Horário" name="recurrence_time">
-                            <Input placeholder="08:00" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    {recurrenceMode === 'yearly' && (
-                      <Row gutter={8}>
-                        <Col span={8}>
-                          <Form.Item label="Mês" name="recurrence_month">
-                            <Select options={[
-                              { value: 1, label: 'Janeiro' }, { value: 2, label: 'Fevereiro' },
-                              { value: 3, label: 'Março' }, { value: 4, label: 'Abril' },
-                              { value: 5, label: 'Maio' }, { value: 6, label: 'Junho' },
-                              { value: 7, label: 'Julho' }, { value: 8, label: 'Agosto' },
-                              { value: 9, label: 'Setembro' }, { value: 10, label: 'Outubro' },
-                              { value: 11, label: 'Novembro' }, { value: 12, label: 'Dezembro' },
-                            ]} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={8}>
-                          <Form.Item label="Dia" name="recurrence_day_of_month">
-                            <InputNumber min={1} max={31} style={{ width: '100%' }} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={8}>
+                        <Col span={10}>
                           <Form.Item label="Horário" name="recurrence_time">
                             <Input placeholder="08:00" />
                           </Form.Item>

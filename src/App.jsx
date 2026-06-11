@@ -2,7 +2,9 @@ import { ConfigProvider, Divider, Layout, Menu, Typography } from 'antd'
 import { useState } from 'react'
 import ptBR from 'antd/locale/pt_BR'
 import {
+  CalendarOutlined,
   DashboardOutlined,
+  FileProtectOutlined,
   FileTextOutlined,
   PlusCircleOutlined,
   SettingOutlined,
@@ -13,6 +15,8 @@ import Dashboard from './pages/Dashboard'
 import ObrigacaoDetalhe from './pages/ObrigacaoDetalhe'
 import NovaObrigacao from './pages/NovaObrigacao'
 import Configuracoes from './pages/Configuracoes'
+import Calendario from './pages/Calendario'
+import Contrato from './pages/Contrato'
 
 const { Sider, Content, Header } = Layout
 const { Text } = Typography
@@ -25,6 +29,8 @@ const menuItems = [
   { key: 'dashboard',   label: 'Dashboard',              icon: <DashboardOutlined /> },
   { key: 'obrigacoes',  label: 'Obrigações',              icon: <FileTextOutlined /> },
   { key: 'nova',        label: 'Nova Obrigação',          icon: <PlusCircleOutlined /> },
+  { key: 'calendario',  label: 'Calendário',              icon: <CalendarOutlined /> },
+  { key: 'contrato',    label: 'Contrato',                icon: <FileProtectOutlined /> },
   { key: 'configuracoes', label: 'Configurações',         icon: <SettingOutlined /> },
 ]
 
@@ -33,13 +39,20 @@ const titulos = {
   obrigacoes:   'Obrigações',
   detalhe:      'Detalhe da Obrigação',
   nova:         'Nova Obrigação',
+  calendario:   'Calendário',
+  contrato:     'Contrato de Concessão',
   configuracoes:'Configurações',
 }
 
 function App() {
   const [paginaAtual, setPaginaAtual] = useState('dashboard')
   const [obrigacaoSelecionada, setObrigacaoSelecionada] = useState(null)
-  const [filtroInicial, setFiltroInicial] = useState(null)
+  const [obrigacoesFiltros, setObrigacoesFiltros] = useState({
+    busca: '',
+    status: null,
+    recorrencia: null,
+    pagina: 1,
+  })
 
   const irParaDetalhe = (id) => {
     setObrigacaoSelecionada(id)
@@ -53,7 +66,9 @@ function App() {
 
   const onMenuClick = ({ key }) => {
     setObrigacaoSelecionada(null)
-    setFiltroInicial(null)
+    if (key === 'obrigacoes') {
+      setObrigacoesFiltros({ busca: '', status: null, recorrencia: null, pagina: 1 })
+    }
     setPaginaAtual(key)
   }
 
@@ -62,15 +77,17 @@ function App() {
       setObrigacaoSelecionada(valor)
       setPaginaAtual('detalhe')
     } else {
-      setFiltroInicial(valor)
+      setObrigacoesFiltros({ busca: '', status: valor || null, recorrencia: null, pagina: 1 })
       setPaginaAtual(pagina)
     }
   }
 
   const renderPagina = () => {
-    if (paginaAtual === 'detalhe')     return <ObrigacaoDetalhe id={obrigacaoSelecionada} onVoltar={voltarParaLista} />
-    if (paginaAtual === 'obrigacoes')  return <Obrigacoes onVerDetalhe={irParaDetalhe} filtroInicial={filtroInicial} />
+    if (paginaAtual === 'detalhe')     return <ObrigacaoDetalhe id={obrigacaoSelecionada} onVoltar={voltarParaLista} onVerDetalhe={irParaDetalhe} />
+    if (paginaAtual === 'obrigacoes')  return <Obrigacoes onVerDetalhe={irParaDetalhe} filtros={obrigacoesFiltros} onFiltrosChange={setObrigacoesFiltros} />
     if (paginaAtual === 'nova')        return <NovaObrigacao />
+    if (paginaAtual === 'calendario') return <Calendario onVerDetalhe={irParaDetalhe} />
+    if (paginaAtual === 'contrato')      return <Contrato />
     if (paginaAtual === 'configuracoes') return <Configuracoes />
     return <Dashboard onNavegar={navegarComFiltro} />
   }

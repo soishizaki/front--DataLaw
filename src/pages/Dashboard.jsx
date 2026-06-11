@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Badge, Calendar, Card, Col, Row, Statistic, Table, Tag, Typography, Spin, message, Progress } from 'antd'
+import { Badge, Card, Col, Row, Statistic, Table, Tag, Typography, Spin, message, Progress } from 'antd'
 import {
   ExclamationCircleOutlined,
   ClockCircleOutlined,
@@ -13,6 +13,14 @@ import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+function dataEfetiva(o) {
+  const rec = o.recurrence || ''
+  if (rec.startsWith('Periódica') && o.next_recurrence_at) return o.next_recurrence_at
+  return o.deadline || null
+}
+
+const isContinua = (o) => (o.recurrence || '').toLowerCase().startsWith('contín')
 
 function calcularResumo(obrigacoes) {
   const hoje = new Date()
@@ -39,8 +47,9 @@ function calcularResumo(obrigacoes) {
 
     if (o.status === 'completed') { concluidas++; continue }
 
-    if (o.deadline) {
-      const prazo = new Date(o.deadline)
+    const data = dataEfetiva(o)
+    if (data && !isContinua(o)) {
+      const prazo = new Date(data)
       prazo.setHours(0, 0, 0, 0)
       const chaveData = prazo.toISOString().split('T')[0]
       if (!porData[chaveData]) porData[chaveData] = []
@@ -77,8 +86,8 @@ function calcularResumo(obrigacoes) {
     .sort((a, b) => b.value - a.value)
 
   const proximasObrigacoes = obrigacoes
-    .filter(o => o.status !== 'completed' && o.deadline)
-    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+    .filter(o => o.status !== 'completed' && !isContinua(o) && dataEfetiva(o))
+    .sort((a, b) => new Date(dataEfetiva(a)) - new Date(dataEfetiva(b)))
     .slice(0, 8)
 
   return {
@@ -147,9 +156,12 @@ const colunasProximas = [
   },
   {
     title: 'Prazo',
-    dataIndex: 'deadline',
+    dataIndex: 'id',
     width: 110,
-    render: v => new Date(v).toLocaleDateString('pt-BR'),
+    render: (_, record) => {
+      const d = dataEfetiva(record)
+      return d ? new Date(d).toLocaleDateString('pt-BR') : '—'
+    },
   },
   {
     title: 'Status',
@@ -248,14 +260,6 @@ function Dashboard({ onNavegar }) {
             </Card>
           </Col>
         ))}
-      </Row>
-
-<Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col span={24}>
-          <Card title="Calendário de vencimentos">
-            <Calendar cellRender={cellRender} />
-          </Card>
-        </Col>
       </Row>
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>

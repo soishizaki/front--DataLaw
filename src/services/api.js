@@ -6,7 +6,12 @@ async function request(path, options = {}) {
     ...options,
   })
   if (!response.ok) {
-    throw new Error(`Erro ${response.status}: ${response.statusText}`)
+    let detail = `Erro ${response.status}: ${response.statusText}`
+    try {
+      const body = await response.json()
+      if (body.detail) detail = body.detail
+    } catch {}
+    throw new Error(detail)
   }
   return response.json()
 }
@@ -25,6 +30,7 @@ export const api = {
       }),
     enviarEmail: (id) =>
       request(`/obligations/${id}/send-email`, { method: 'POST' }),
+    buscarDependentes: (id) => request(`/obligations/${id}/dependents`),
     deletar: (id) =>
       request(`/obligations/${id}`, { method: 'DELETE' }),
     criar: (dados) =>
