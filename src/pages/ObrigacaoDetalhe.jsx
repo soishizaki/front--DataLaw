@@ -30,11 +30,23 @@ const DOCUMENTO_PDF = {
   'Contrato': '/contrato.pdf',
   'Anexo 1 - Regulamento da Concessão': '/anexo1.pdf',
   'Anexo 2 - Plano de Exploração Aeroportuária (PEA)': '/anexo2.pdf',
+  'Anexo 3': '/anexo3.pdf',
   'Anexo 4 - Plano de Transferência Operacional (PTO)': '/anexo4.pdf',
   'Anexo 5 - Tarifas Aeroportuárias': '/anexo5.pdf',
   'Anexo 6 - Contrato de Administração de Contas': '/anexo6.pdf',
+  'Anexo 7': '/anexo7.pdf',
   'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos': '/anexo8.pdf',
+  'Anexo 9': '/anexo9.pdf',
+  'Anexo 10': '/anexo10.pdf',
+  'Anexo 11': '/anexo11.pdf',
+  'Anexo 12': '/anexo12.pdf',
+  'Anexo 13': '/anexo13.pdf',
+  'Anexo 14': '/anexo14.pdf',
+  'Anexo 15': '/anexo15.pdf',
+  'Anexo 16': '/anexo16.pdf',
   'Anexo 17 - Caderno de Penalidades': '/anexo17.pdf',
+  'Anexo 18': '/anexo18.pdf',
+  'Edital': '/edital.pdf',
 }
 
 const labelStatus = {
@@ -363,7 +375,7 @@ function ObrigacaoDetalhe({ id, onVoltar, onVerDetalhe }) {
         <Col span={16}>
           <Card style={{ marginBottom: 16 }}>
             <Title level={5} style={{ marginBottom: 16 }}>Dados da Obrigação</Title>
-            <Descriptions column={2} bordered size="small">
+            <Descriptions column={1} bordered size="small">
               <Descriptions.Item label="Item" span={1}>
                 {dados.item_number || '—'}
               </Descriptions.Item>

@@ -38,6 +38,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(dados),
       }),
+    reset: () => request('/obligations/reset', { method: 'POST' }),
   },
   contratos: {
     listar: () => request('/contracts/'),

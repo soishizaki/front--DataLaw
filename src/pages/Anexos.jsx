@@ -1,4 +1,7 @@
-import { Tabs } from 'antd'
+import { useState } from 'react'
+import { Input, Tabs } from 'antd'
+import { EditOutlined } from '@ant-design/icons'
+import { CHAVE_NOMES_ANEXOS } from '../utils/anexosNomes'
 
 const ANEXOS = [
   { key: 'anexo1',  label: 'Anexo 1 – Regulamento',  src: '/anexo1.pdf'  },
@@ -21,19 +24,70 @@ const ANEXOS = [
   { key: 'anexo18', label: 'Anexo 18',                 src: '/anexo18.pdf' },
 ]
 
+const CHAVE_NOMES = CHAVE_NOMES_ANEXOS
+
 export default function Anexos() {
+  const [nomes, setNomes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(CHAVE_NOMES)) || {} }
+    catch { return {} }
+  })
+  const [editando, setEditando] = useState(null)
+  const [nomeTemp, setNomeTemp] = useState('')
+
+  const getNome = (a) => nomes[a.key] || a.label
+
+  const salvarNome = (key, defaultLabel) => {
+    const novo = nomeTemp.trim() || defaultLabel
+    const atualizados = { ...nomes, [key]: novo === defaultLabel ? undefined : novo }
+    Object.keys(atualizados).forEach(k => atualizados[k] === undefined && delete atualizados[k])
+    setNomes(atualizados)
+    localStorage.setItem(CHAVE_NOMES, JSON.stringify(atualizados))
+    setEditando(null)
+  }
+
+  const tabLabel = (a) => {
+    if (editando === a.key) {
+      return (
+        <Input
+          size="small"
+          value={nomeTemp}
+          onChange={e => setNomeTemp(e.target.value)}
+          onPressEnter={() => salvarNome(a.key, a.label)}
+          onBlur={() => salvarNome(a.key, a.label)}
+          style={{ width: 160 }}
+          autoFocus
+          onClick={e => e.stopPropagation()}
+        />
+      )
+    }
+    return (
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {getNome(a)}
+        <EditOutlined
+          style={{ fontSize: 11, color: '#aaa', flexShrink: 0 }}
+          onMouseDown={e => {
+            e.preventDefault()
+            e.stopPropagation()
+            setEditando(a.key)
+            setNomeTemp(getNome(a))
+          }}
+        />
+      </span>
+    )
+  }
+
   return (
     <Tabs
       defaultActiveKey="anexo1"
       destroyInactiveTabPane
       items={ANEXOS.map(a => ({
         key: a.key,
-        label: a.label,
+        label: tabLabel(a),
         children: (
           <iframe
             key={a.key}
             src={a.src}
-            title={a.label}
+            title={getNome(a)}
             style={{ width: '100%', border: 'none', borderRadius: 8, minHeight: 700 }}
           />
         ),

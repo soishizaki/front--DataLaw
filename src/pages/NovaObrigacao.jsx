@@ -5,19 +5,32 @@ import {
 } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { api } from '../services/api'
+import { getLabelDocumento } from '../utils/anexosNomes'
 
 const { TextArea } = Input
 const { Text, Title } = Typography
 
 const DOCUMENTOS = [
   { value: 'Contrato', label: 'Contrato' },
-  { value: 'Anexo 2 - Plano de Exploração Aeroportuária (PEA)', label: 'Anexo 2 - Plano de Exploração Aeroportuária (PEA)' },
   { value: 'Anexo 1 - Regulamento da Concessão', label: 'Anexo 1 - Regulamento da Concessão' },
+  { value: 'Anexo 2 - Plano de Exploração Aeroportuária (PEA)', label: 'Anexo 2 - Plano de Exploração Aeroportuária (PEA)' },
+  { value: 'Anexo 3', label: 'Anexo 3' },
   { value: 'Anexo 4 - Plano de Transferência Operacional (PTO)', label: 'Anexo 4 - Plano de Transferência Operacional (PTO)' },
-  { value: 'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos', label: 'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos' },
   { value: 'Anexo 5 - Tarifas Aeroportuárias', label: 'Anexo 5 - Tarifas Aeroportuárias' },
   { value: 'Anexo 6 - Contrato de Administração de Contas', label: 'Anexo 6 - Contrato de Administração de Contas' },
+  { value: 'Anexo 7', label: 'Anexo 7' },
+  { value: 'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos', label: 'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos' },
+  { value: 'Anexo 9', label: 'Anexo 9' },
+  { value: 'Anexo 10', label: 'Anexo 10' },
+  { value: 'Anexo 11', label: 'Anexo 11' },
+  { value: 'Anexo 12', label: 'Anexo 12' },
+  { value: 'Anexo 13', label: 'Anexo 13' },
+  { value: 'Anexo 14', label: 'Anexo 14' },
+  { value: 'Anexo 15', label: 'Anexo 15' },
+  { value: 'Anexo 16', label: 'Anexo 16' },
   { value: 'Anexo 17 - Caderno de Penalidades', label: 'Anexo 17 - Caderno de Penalidades' },
+  { value: 'Anexo 18', label: 'Anexo 18' },
+  { value: 'Edital', label: 'Edital' },
 ]
 
 const RECORRENCIAS_PERIODICAS = [
@@ -183,7 +196,7 @@ function NovaObrigacao() {
                   placeholder="Selecione o documento"
                   showSearch
                   optionFilterProp="label"
-                  options={DOCUMENTOS}
+                  options={DOCUMENTOS.map(d => ({ ...d, label: getLabelDocumento(d.value) }))}
                 />
               </Form.Item>
 

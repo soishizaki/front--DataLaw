@@ -59,6 +59,7 @@ function App() {
     busca: '',
     status: null,
     recorrencia: null,
+    documento: null,
     pagina: 1,
   })
 
@@ -75,7 +76,7 @@ function App() {
   const onMenuClick = ({ key }) => {
     setObrigacaoSelecionada(null)
     if (key === 'obrigacoes') {
-      setObrigacoesFiltros({ busca: '', status: null, recorrencia: null, pagina: 1 })
+      setObrigacoesFiltros({ busca: '', status: null, recorrencia: null, documento: null, pagina: 1 })
     }
     setPaginaAtual(key)
   }
@@ -85,7 +86,7 @@ function App() {
       setObrigacaoSelecionada(valor)
       setPaginaAtual('detalhe')
     } else {
-      setObrigacoesFiltros({ busca: '', status: valor || null, recorrencia: null, pagina: 1 })
+      setObrigacoesFiltros({ busca: '', status: valor || null, recorrencia: null, documento: null, pagina: 1 })
       setPaginaAtual(pagina)
     }
   }

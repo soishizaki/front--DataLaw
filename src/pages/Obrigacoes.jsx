@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Table, Tag, Input, Select, Space, Typography, message } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { api } from '../services/api'
+import { getLabelDocumento } from '../utils/anexosNomes'
 
 const { Title } = Typography
 
@@ -113,6 +114,29 @@ const colunas = [
   },
 ]
 
+const DOCUMENTOS_FILTRO = [
+  { value: 'Contrato', label: 'Contrato' },
+  { value: 'Anexo 1 - Regulamento da Concessão', label: 'Anexo 1' },
+  { value: 'Anexo 2 - Plano de Exploração Aeroportuária (PEA)', label: 'Anexo 2' },
+  { value: 'Anexo 3', label: 'Anexo 3' },
+  { value: 'Anexo 4 - Plano de Transferência Operacional (PTO)', label: 'Anexo 4' },
+  { value: 'Anexo 5 - Tarifas Aeroportuárias', label: 'Anexo 5' },
+  { value: 'Anexo 6 - Contrato de Administração de Contas', label: 'Anexo 6' },
+  { value: 'Anexo 7', label: 'Anexo 7' },
+  { value: 'Anexo 8 - Termo de Aceitação e Permissão de Uso de Ativos', label: 'Anexo 8' },
+  { value: 'Anexo 9', label: 'Anexo 9' },
+  { value: 'Anexo 10', label: 'Anexo 10' },
+  { value: 'Anexo 11', label: 'Anexo 11' },
+  { value: 'Anexo 12', label: 'Anexo 12' },
+  { value: 'Anexo 13', label: 'Anexo 13' },
+  { value: 'Anexo 14', label: 'Anexo 14' },
+  { value: 'Anexo 15', label: 'Anexo 15' },
+  { value: 'Anexo 16', label: 'Anexo 16' },
+  { value: 'Anexo 17 - Caderno de Penalidades', label: 'Anexo 17' },
+  { value: 'Anexo 18', label: 'Anexo 18' },
+  { value: 'Edital', label: 'Edital' },
+]
+
 function Obrigacoes({ onVerDetalhe, filtros = {}, onFiltrosChange }) {
   const [dados, setDados] = useState([])
   const [total, setTotal] = useState(0)
@@ -121,11 +145,12 @@ function Obrigacoes({ onVerDetalhe, filtros = {}, onFiltrosChange }) {
   const [filtroStatus, setFiltroStatus] = useState(filtros.status || null)
   const [filtroRecorrencia, setFiltroRecorrencia] = useState(filtros.recorrencia || null)
   const [filtroFase, setFiltroFase] = useState(filtros.fase || null)
+  const [filtroDocumento, setFiltroDocumento] = useState(filtros.documento || null)
   const [pagina, setPagina] = useState(filtros.pagina || 1)
   const limite = 15
   const debounceRef = useRef(null)
 
-  const carregar = async (paginaAtual = 1, q = busca, status = filtroStatus, recurrence = filtroRecorrencia, fase = filtroFase) => {
+  const carregar = async (paginaAtual = 1, q = busca, status = filtroStatus, recurrence = filtroRecorrencia, fase = filtroFase, documento = filtroDocumento) => {
     setCarregando(true)
     try {
       const params = {
@@ -136,6 +161,7 @@ function Obrigacoes({ onVerDetalhe, filtros = {}, onFiltrosChange }) {
       if (status && status !== 'all') params.status = status
       if (recurrence) params.recurrence = recurrence
       if (fase) params.contract_phase = fase
+      if (documento) params.document_name = documento
 
       const resultado = await api.obrigacoes.listar(params)
       setDados(resultado.items)
@@ -148,7 +174,7 @@ function Obrigacoes({ onVerDetalhe, filtros = {}, onFiltrosChange }) {
   }
 
   useEffect(() => {
-    carregar(filtros.pagina || 1, filtros.busca || '', filtros.status || null, filtros.recorrencia || null, filtros.fase || null)
+    carregar(filtros.pagina || 1, filtros.busca || '', filtros.status || null, filtros.recorrencia || null, filtros.fase || null, filtros.documento || null)
   }, [])
 
   const onBuscar = (valor) => {
@@ -156,8 +182,8 @@ function Obrigacoes({ onVerDetalhe, filtros = {}, onFiltrosChange }) {
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setPagina(1)
-      carregar(1, valor, filtroStatus, filtroRecorrencia, filtroFase)
-      onFiltrosChange?.({ busca: valor, status: filtroStatus, recorrencia: filtroRecorrencia, fase: filtroFase, pagina: 1 })
+      carregar(1, valor, filtroStatus, filtroRecorrencia, filtroFase, filtroDocumento)
+      onFiltrosChange?.({ busca: valor, status: filtroStatus, recorrencia: filtroRecorrencia, fase: filtroFase, documento: filtroDocumento, pagina: 1 })
     }, 400)
   }
 
@@ -165,30 +191,38 @@ function Obrigacoes({ onVerDetalhe, filtros = {}, onFiltrosChange }) {
     const v = valor ?? null
     setFiltroStatus(v)
     setPagina(1)
-    carregar(1, busca, v, filtroRecorrencia, filtroFase)
-    onFiltrosChange?.({ busca, status: v, recorrencia: filtroRecorrencia, fase: filtroFase, pagina: 1 })
+    carregar(1, busca, v, filtroRecorrencia, filtroFase, filtroDocumento)
+    onFiltrosChange?.({ busca, status: v, recorrencia: filtroRecorrencia, fase: filtroFase, documento: filtroDocumento, pagina: 1 })
   }
 
   const onFiltrarRecorrencia = (valor) => {
     const v = valor || null
     setFiltroRecorrencia(v)
     setPagina(1)
-    carregar(1, busca, filtroStatus, v, filtroFase)
-    onFiltrosChange?.({ busca, status: filtroStatus, recorrencia: v, fase: filtroFase, pagina: 1 })
+    carregar(1, busca, filtroStatus, v, filtroFase, filtroDocumento)
+    onFiltrosChange?.({ busca, status: filtroStatus, recorrencia: v, fase: filtroFase, documento: filtroDocumento, pagina: 1 })
   }
 
   const onFiltrarFase = (valor) => {
     const v = valor || null
     setFiltroFase(v)
     setPagina(1)
-    carregar(1, busca, filtroStatus, filtroRecorrencia, v)
-    onFiltrosChange?.({ busca, status: filtroStatus, recorrencia: filtroRecorrencia, fase: v, pagina: 1 })
+    carregar(1, busca, filtroStatus, filtroRecorrencia, v, filtroDocumento)
+    onFiltrosChange?.({ busca, status: filtroStatus, recorrencia: filtroRecorrencia, fase: v, documento: filtroDocumento, pagina: 1 })
+  }
+
+  const onFiltrarDocumento = (valor) => {
+    const v = valor || null
+    setFiltroDocumento(v)
+    setPagina(1)
+    carregar(1, busca, filtroStatus, filtroRecorrencia, filtroFase, v)
+    onFiltrosChange?.({ busca, status: filtroStatus, recorrencia: filtroRecorrencia, fase: filtroFase, documento: v, pagina: 1 })
   }
 
   const onMudarPagina = (novaPagina) => {
     setPagina(novaPagina)
-    carregar(novaPagina, busca, filtroStatus, filtroRecorrencia, filtroFase)
-    onFiltrosChange?.({ busca, status: filtroStatus, recorrencia: filtroRecorrencia, fase: filtroFase, pagina: novaPagina })
+    carregar(novaPagina, busca, filtroStatus, filtroRecorrencia, filtroFase, filtroDocumento)
+    onFiltrosChange?.({ busca, status: filtroStatus, recorrencia: filtroRecorrencia, fase: filtroFase, documento: filtroDocumento, pagina: novaPagina })
   }
 
   return (
@@ -246,6 +280,16 @@ function Obrigacoes({ onVerDetalhe, filtros = {}, onFiltrosChange }) {
             { value: 'Todas as fases', label: 'Todas as fases' },
           ]}
         />
+        <Select
+          placeholder="Filtrar por documento"
+          style={{ width: 180 }}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          value={filtroDocumento}
+          onChange={onFiltrarDocumento}
+          options={DOCUMENTOS_FILTRO.map(d => ({ ...d, label: getLabelDocumento(d.value) }))}
+        />
       </Space>
 
       <Table
@@ -253,6 +297,7 @@ function Obrigacoes({ onVerDetalhe, filtros = {}, onFiltrosChange }) {
         columns={colunas}
         rowKey="id"
         loading={carregando}
+        scroll={{ x: 850 }}
         onRow={(record) => ({
           onClick: () => onVerDetalhe(record.id),
           style: { cursor: 'pointer' },

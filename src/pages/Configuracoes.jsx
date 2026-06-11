@@ -40,6 +40,8 @@ function lerEmails() {
 function Configuracoes() {
   const [form] = Form.useForm()
   const [formEscritorio] = Form.useForm()
+  const [resetando, setResetando] = useState(false)
+  const [confirmarReset, setConfirmarReset] = useState(false)
   const [savedEmailAt, setSavedEmailAt] = useState(null)
   const [savedEscritorioAt, setSavedEscritorioAt] = useState(null)
   const [salvandoEscritorio, setSalvandoEscritorio] = useState(false)
@@ -145,6 +147,19 @@ function Configuracoes() {
       setTimeout(() => { input.selectionStart = input.selectionEnd = s + chave.length; input.focus() }, 0)
     } else {
       setEmailCorpo(prev => prev + chave)
+    }
+  }
+
+  const onReset = async () => {
+    setResetando(true)
+    try {
+      const res = await api.obrigacoes.reset()
+      setConfirmarReset(false)
+      message.success(`Sistema resetado. ${res.resetadas} obrigações voltaram para "Pendente".`)
+    } catch {
+      message.error('Erro ao resetar o sistema.')
+    } finally {
+      setResetando(false)
     }
   }
 
@@ -424,6 +439,21 @@ function Configuracoes() {
         </Col>
       </Row>
 
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col span={16}>
+          <Card style={{ borderColor: '#ff4d4f' }}>
+            <Title level={5} style={{ color: '#ff4d4f', marginBottom: 4 }}>Zona de Perigo</Title>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+              Esta ação reseta todas as interações manuais: status voltam para "Pendente", prazos manuais são apagados,
+              histórico de alterações é removido. Datas definidas no contrato são mantidas.
+            </Text>
+            <Button danger onClick={() => setConfirmarReset(true)}>
+              Resetar sistema
+            </Button>
+          </Card>
+        </Col>
+      </Row>
+
       <Modal
         title="Prévia do email (com valores de exemplo)"
         open={previewAberta}
@@ -443,6 +473,20 @@ function Configuracoes() {
         <Text type="secondary" style={{ fontSize: 11, marginTop: 8, display: 'block' }}>
           Os valores acima são apenas ilustrativos. O email real usará os dados da obrigação correspondente.
         </Text>
+      </Modal>
+
+      <Modal
+        open={confirmarReset}
+        title="Resetar sistema"
+        okText="Resetar"
+        okButtonProps={{ danger: true, loading: resetando }}
+        cancelText="Cancelar"
+        onCancel={() => { if (!resetando) setConfirmarReset(false) }}
+        onOk={onReset}
+        maskClosable={!resetando}
+      >
+        <p>Todas as obrigações voltarão para <strong>"Pendente"</strong> e os prazos definidos manualmente serão removidos.</p>
+        <p>O histórico de alterações será apagado. <strong>Esta ação não pode ser desfeita.</strong></p>
       </Modal>
     </div>
   )
